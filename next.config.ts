@@ -1,3 +1,4 @@
+import path from "path";
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
@@ -6,6 +7,10 @@ const nextConfig: NextConfig = {
   // Les images statiques ne sont pas optimisées en mode export
   images: {
     unoptimized: true,
+  },
+  // Détecte la racine du projet pour éviter que Next 16 ne détecte backend/ (workspace)
+  turbopack: {
+    root: path.join(__dirname),
   },
 };
 
