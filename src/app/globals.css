@@ -1,0 +1,348 @@
+@import "tailwindcss";
+
+/* Protecteur — Système de sécurité domestique
+   Palette professionnelle: Navy foncé + Orange Amazon */
+:root,
+[data-theme="dark"] {
+  --protecteur-navy: #232F3E;
+  --protecteur-navy-light: #2C3E50;
+  --protecteur-navy-deep: #1A2332;
+  --protecteur-orange: #FF9900;
+  --protecteur-orange-dark: #E88B00;
+  --protecteur-orange-glow: rgba(255, 153, 0, 0.15);
+  --protecteur-surface: #243447;
+  --protecteur-surface-light: #2D4155;
+  --protecteur-border: #334155;
+  --protecteur-border-light: #3D5068;
+  --protecteur-text: #FFFFFF;
+  --protecteur-text-secondary: #94A3B8;
+  --protecteur-text-muted: #64748B;
+  --protecteur-success: #00C853;
+  --protecteur-success-glow: rgba(0, 200, 83, 0.12);
+  --protecteur-warning: #FF9900;
+  --protecteur-warning-glow: rgba(255, 153, 0, 0.12);
+  --protecteur-danger: #FF1744;
+  --protecteur-danger-glow: rgba(255, 23, 68, 0.12);
+  --protecteur-info: #2979FF;
+  --protecteur-info-glow: rgba(41, 121, 255, 0.12);
+}
+
+[data-theme="light"] {
+  --protecteur-navy: #E8EDF2;
+  --protecteur-navy-light: #D5DCE4;
+  --protecteur-navy-deep: #F0F2F5;
+  --protecteur-orange: #E68A00;
+  --protecteur-orange-dark: #CC7A00;
+  --protecteur-orange-glow: rgba(230, 138, 0, 0.12);
+  --protecteur-surface: #FFFFFF;
+  --protecteur-surface-light: #F5F7FA;
+  --protecteur-border: #D1D5DB;
+  --protecteur-border-light: #E5E7EB;
+  --protecteur-text: #1A2332;
+  --protecteur-text-secondary: #4B5563;
+  --protecteur-text-muted: #9CA3AF;
+  --protecteur-success: #16A34A;
+  --protecteur-success-glow: rgba(22, 163, 74, 0.10);
+  --protecteur-warning: #D97706;
+  --protecteur-warning-glow: rgba(217, 119, 6, 0.10);
+  --protecteur-danger: #DC2626;
+  --protecteur-danger-glow: rgba(220, 38, 38, 0.10);
+  --protecteur-info: #2563EB;
+  --protecteur-info-glow: rgba(37, 99, 235, 0.10);
+}
+
+[data-theme="nord"] {
+  --protecteur-navy: #2E3440;
+  --protecteur-navy-light: #3B4252;
+  --protecteur-navy-deep: #272C36;
+  --protecteur-orange: #D08770;
+  --protecteur-orange-dark: #BF7556;
+  --protecteur-orange-glow: rgba(208, 135, 112, 0.15);
+  --protecteur-surface: #343A48;
+  --protecteur-surface-light: #3D4455;
+  --protecteur-border: #434C5E;
+  --protecteur-border-light: #4C566A;
+  --protecteur-text: #ECEFF4;
+  --protecteur-text-secondary: #D8DEE9;
+  --protecteur-text-muted: #7B88A1;
+  --protecteur-success: #A3BE8C;
+  --protecteur-success-glow: rgba(163, 190, 140, 0.12);
+  --protecteur-warning: #EBCB8B;
+  --protecteur-warning-glow: rgba(235, 203, 139, 0.12);
+  --protecteur-danger: #BF616A;
+  --protecteur-danger-glow: rgba(191, 97, 106, 0.12);
+  --protecteur-info: #88C0D0;
+  --protecteur-info-glow: rgba(136, 192, 208, 0.12);
+}
+
+@theme inline {
+  --color-protecteur-navy: var(--protecteur-navy);
+  --color-protecteur-navy-light: var(--protecteur-navy-light);
+  --color-protecteur-navy-deep: var(--protecteur-navy-deep);
+  --color-protecteur-orange: var(--protecteur-orange);
+  --color-protecteur-orange-dark: var(--protecteur-orange-dark);
+  --color-protecteur-orange-glow: var(--protecteur-orange-glow);
+  --color-protecteur-surface: var(--protecteur-surface);
+  --color-protecteur-surface-light: var(--protecteur-surface-light);
+  --color-protecteur-border: var(--protecteur-border);
+  --color-protecteur-border-light: var(--protecteur-border-light);
+  --color-protecteur-text: var(--protecteur-text);
+  --color-protecteur-text-secondary: var(--protecteur-text-secondary);
+  --color-protecteur-text-muted: var(--protecteur-text-muted);
+  --color-protecteur-success: var(--protecteur-success);
+  --color-protecteur-success-glow: var(--protecteur-success-glow);
+  --color-protecteur-warning: var(--protecteur-warning);
+  --color-protecteur-warning-glow: var(--protecteur-warning-glow);
+  --color-protecteur-danger: var(--protecteur-danger);
+  --color-protecteur-danger-glow: var(--protecteur-danger-glow);
+  --color-protecteur-info: var(--protecteur-info);
+  --color-protecteur-info-glow: var(--protecteur-info-glow);
+}
+
+body {
+  background-color: var(--protecteur-navy-deep);
+  color: var(--protecteur-text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 8px);
+}
+
+/* Animation rebond splash */
+@keyframes rebond {
+  0%, 100% {
+    transform: translateY(0) scale(1);
+  }
+  25% {
+    transform: translateY(-20px) scale(1.05);
+  }
+  50% {
+    transform: translateY(0) scale(0.95);
+  }
+  75% {
+    transform: translateY(-10px) scale(1.02);
+  }
+}
+
+.animate-rebond {
+  animation: rebond 1.5s ease-in-out infinite;
+}
+
+/* Pulse respirant pour le sémaphore — le protecteur veille */
+@keyframes pulse-respirant {
+  0%, 100% {
+    box-shadow: 0 0 0 0 var(--pulse-color, rgba(0, 200, 83, 0.4));
+    opacity: 1;
+  }
+  50% {
+    box-shadow: 0 0 20px 8px var(--pulse-color, rgba(0, 200, 83, 0.15));
+    opacity: 0.85;
+  }
+}
+
+.animate-pulse-respirant {
+  animation: pulse-respirant 2.5s ease-in-out infinite;
+}
+
+/* Pulse subtil pour les points de statut */
+@keyframes pulse-point {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.6;
+    transform: scale(0.9);
+  }
+}
+
+.animate-pulse-point {
+  animation: pulse-point 2s ease-in-out infinite;
+}
+
+/* Transition pages */
+@keyframes fondu-entree {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fondu {
+  animation: fondu-entree 0.4s ease-out forwards;
+}
+
+/* Lueur interne orange pour les éléments importants */
+@keyframes lueur {
+  0%, 100% {
+    box-shadow: inset 0 0 0 1px rgba(255, 153, 0, 0.1), 0 0 0 0 rgba(255, 153, 0, 0);
+  }
+  50% {
+    box-shadow: inset 0 0 0 1px rgba(255, 153, 0, 0.2), 0 0 12px 2px rgba(255, 153, 0, 0.08);
+  }
+}
+
+.animate-lueur {
+  animation: lueur 3s ease-in-out infinite;
+}
+
+/* Scrollbar discrète pour le dark mode */
+::-webkit-scrollbar {
+  width: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--protecteur-border);
+  border-radius: 4px;
+}
+
+/* === Overrides Theme — harmonisation des couleurs hardcodées === */
+[data-theme="light"] body,
+[data-theme="light"] {
+  color-scheme: light;
+}
+
+/* Fond principal */
+[data-theme="light"] .bg-\[\#1A2332\] {
+  background-color: var(--protecteur-navy-deep) !important;
+}
+
+/* Cartes / surfaces */
+[data-theme="light"] .bg-\[\#243447\] {
+  background-color: var(--protecteur-surface) !important;
+}
+
+/* Bordures */
+[data-theme="light"] .border-\[\#334155\],
+[data-theme="light"] .border-\[\#334155\]\/\* {
+  border-color: var(--protecteur-border) !important;
+}
+
+/* Texte principal */
+[data-theme="light"] .text-white {
+  color: var(--protecteur-text) !important;
+}
+
+/* Texte secondaire */
+[data-theme="light"] .text-\[\#94A3B8\] {
+  color: var(--protecteur-text-secondary) !important;
+}
+
+/* Texte muet */
+[data-theme="light"] .text-\[\#64748B\] {
+  color: var(--protecteur-text-muted) !important;
+}
+
+/* Placeholder */
+[data-theme="light"] .placeholder-\[\#64748B\]::placeholder {
+  color: var(--protecteur-text-muted) !important;
+}
+
+/* Orange accent — buttons & active states */
+[data-theme="light"] .bg-\[\#FF9900\] {
+  background-color: var(--protecteur-orange) !important;
+}
+[data-theme="light"] .text-\[\#FF9900\] {
+  color: var(--protecteur-orange) !important;
+}
+[data-theme="light"] .border-\[\#FF9900\] {
+  border-color: var(--protecteur-orange) !important;
+}
+
+/* Success */
+[data-theme="light"] .bg-\[\#00C853\] {
+  background-color: var(--protecteur-success) !important;
+}
+[data-theme="light"] .text-\[\#00C853\] {
+  color: var(--protecteur-success) !important;
+}
+
+/* Danger */
+[data-theme="light"] .bg-\[\#FF1744\] {
+  background-color: var(--protecteur-danger) !important;
+}
+[data-theme="light"] .text-\[\#FF1744\] {
+  color: var(--protecteur-danger) !important;
+}
+[data-theme="light"] .border-\[\#FF1744\] {
+  border-color: var(--protecteur-danger) !important;
+}
+
+/* Info */
+[data-theme="light"] .text-\[\#2979FF\] {
+  color: var(--protecteur-info) !important;
+}
+
+/* Ring orange */
+[data-theme="light"] .ring-\[\#FF9900\]\/20 {
+  --tw-ring-color: var(--protecteur-orange-glow) !important;
+}
+
+/* === Nord theme — mêmes overrides === */
+[data-theme="nord"] .bg-\[\#1A2332\] {
+  background-color: var(--protecteur-navy-deep) !important;
+}
+[data-theme="nord"] .bg-\[\#243447\] {
+  background-color: var(--protecteur-surface) !important;
+}
+[data-theme="nord"] .border-\[\#334155\],
+[data-theme="nord"] .border-\[\#334155\]\/\* {
+  border-color: var(--protecteur-border) !important;
+}
+[data-theme="nord"] .text-white {
+  color: var(--protecteur-text) !important;
+}
+[data-theme="nord"] .text-\[\#94A3B8\] {
+  color: var(--protecteur-text-secondary) !important;
+}
+[data-theme="nord"] .text-\[\#64748B\] {
+  color: var(--protecteur-text-muted) !important;
+}
+[data-theme="nord"] .placeholder-\[\#64748B\]::placeholder {
+  color: var(--protecteur-text-muted) !important;
+}
+[data-theme="nord"] .bg-\[\#FF9900\] {
+  background-color: var(--protecteur-orange) !important;
+}
+[data-theme="nord"] .text-\[\#FF9900\] {
+  color: var(--protecteur-orange) !important;
+}
+[data-theme="nord"] .border-\[\#FF9900\] {
+  border-color: var(--protecteur-orange) !important;
+}
+[data-theme="nord"] .bg-\[\#00C853\] {
+  background-color: var(--protecteur-success) !important;
+}
+[data-theme="nord"] .text-\[\#00C853\] {
+  color: var(--protecteur-success) !important;
+}
+[data-theme="nord"] .bg-\[\#FF1744\] {
+  background-color: var(--protecteur-danger) !important;
+}
+[data-theme="nord"] .text-\[\#FF1744\] {
+  color: var(--protecteur-danger) !important;
+}
+[data-theme="nord"] .border-\[\#FF1744\] {
+  border-color: var(--protecteur-danger) !important;
+}
+[data-theme="nord"] .text-\[\#2979FF\] {
+  color: var(--protecteur-info) !important;
+}
+[data-theme="nord"] .ring-\[\#FF9900\]\/20 {
+  --tw-ring-color: var(--protecteur-orange-glow) !important;
+}

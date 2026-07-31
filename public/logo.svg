@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <defs>
+    <linearGradient id="shieldGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#3D5068"/>
+      <stop offset="100%" stop-color="#232F3E"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="2" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Ombre externe -->
+  <path d="M100 24 L168 54 L168 108 Q168 156 100 180 Q32 156 32 108 L32 54 Z"
+        fill="rgba(0,0,0,0.25)" transform="translate(2,3)"/>
+
+  <!-- Bouclier principal -->
+  <path d="M100 24 L168 54 L168 108 Q168 156 100 180 Q32 156 32 108 L32 54 Z"
+        fill="url(#shieldGrad)" stroke="#FF9900" stroke-width="2.5"/>
+
+  <!-- Ligne décorative intérieure -->
+  <path d="M100 36 L158 62 L158 106 Q158 148 100 170 Q42 148 42 106 L42 62 Z"
+        fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>
+
+  <!-- Icône bouclier central — protection -->
+  <g filter="url(#glow)">
+    <path d="M100 70 L130 84 L130 110 Q130 130 100 140 Q70 130 70 110 L70 84 Z"
+          fill="none" stroke="#FF9900" stroke-width="2.5" stroke-linejoin="round"/>
+    <circle cx="100" cy="102" r="6" fill="#FF9900"/>
+    <circle cx="100" cy="102" r="3" fill="#232F3E"/>
+  </g>
+
+  <!-- Petits indicateurs latéraux — capteurs actifs -->
+  <circle cx="55" cy="100" r="3.5" fill="#00C853" opacity="0.9"/>
+  <circle cx="145" cy="100" r="3.5" fill="#00C853" opacity="0.9"/>
+  <circle cx="100" cy="55" r="3.5" fill="#FF9900" opacity="0.9"/>
+
+  <!-- Trait de base -->
+  <line x1="80" y1="155" x2="120" y2="155" stroke="rgba(255,255,255,0.15)" stroke-width="1.5" stroke-linecap="round"/>
+</svg>
