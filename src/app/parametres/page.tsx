@@ -8,6 +8,7 @@ import Navigation from "@/components/ui/Navigation";
 import Carte from "@/components/ui/Carte";
 import Bouton from "@/components/ui/Bouton";
 import { validerEmail, validerTelephone } from "@/lib/validators";
+import { obtenirConfigAlertes, sauvegarderConfigAlertes } from "@/lib/api";
 import type { ThemeNom } from "@/types";
 
 const THEMES: { valeur: ThemeNom; label: string; description: string; icone: string }[] = [
@@ -52,6 +53,16 @@ export default function ParametresPage() {
     document.documentElement.setAttribute("data-theme", theme);
   }, [theme]);
 
+  useEffect(() => {
+    let annule = false;
+    obtenirConfigAlertes().then((config) => {
+      if (annule) return;
+      if (config?.email) setEmail(config.email);
+      if (config?.sms) setTelephone(config.sms);
+    });
+    return () => { annule = true; };
+  }, []);
+
   const sauvegarder = () => {
     setEmailErreur("");
     setTelErreur("");
@@ -82,18 +93,13 @@ export default function ParametresPage() {
     };
     localStorage.setItem("protecteur_utilisateur", JSON.stringify(utilisateur));
     localStorage.setItem("protecteur_theme", JSON.stringify(theme));
+    sauvegarderConfigAlertes({ email, sms: telephone });
     setMessage("Profil sauvegardé");
     setTimeout(() => setMessage(""), 2500);
   };
 
   const deconnecter = () => {
-    const etatStr = localStorage.getItem("protecteur_etat_app");
-    if (etatStr) {
-      const etat = JSON.parse(etatStr);
-      etat.utilisateurConnecte = false;
-      localStorage.setItem("protecteur_etat_app", JSON.stringify(etat));
-    }
-    router.replace("/connexion");
+    router.replace("/");
   };
 
   const reinitialiser = () => {

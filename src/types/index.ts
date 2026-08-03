@@ -105,17 +105,21 @@ export interface ParametresNotification {
   activees: boolean;
   presences: boolean;
   temperatures: boolean;
-  flammes: boolean;
+  gaz: boolean;
+  humidites: boolean;
   rapportsQuotidiens: boolean;
   email: string;
 }
 
-export interface ParametresSMS {
-  active: boolean;
-  numeroTelephone: string;
-  alertesPresence: boolean;
-  toutesLesAlertes: boolean;
-  urgenceUniquement: boolean;
+export interface ConfigAlertes {
+  id?: number;
+  email?: string | null;
+  sms?: string | null;
+  temp_min?: number | null;
+  temp_max?: number | null;
+  hum_min?: number | null;
+  hum_max?: number | null;
+  gaz_max?: number | null;
 }
 
 export type ThemeNom = "dark" | "light" | "nord";

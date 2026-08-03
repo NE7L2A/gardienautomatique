@@ -6,8 +6,8 @@ import Header from "@/components/ui/Header";
 import Navigation from "@/components/ui/Navigation";
 import Semaphore from "@/components/dashboard/Semaphore";
 import CarteCapteur from "@/components/dashboard/CarteCapteur";
-import { alertesRecentes } from "@/lib/mock-data";
-import { supprimerDispositif, getSeuilsCapteur } from "@/lib/store";
+import { alertesRecentes, libelleTypeCapteur } from "@/lib/mock-data";
+import { supprimerDispositif } from "@/lib/store";
 import {
   construireDispositifs,
   grouperDispositifs,
@@ -18,6 +18,8 @@ import {
 import {
   obtenirCapteurs,
   obtenirMesures,
+  obtenirConfigAlertes,
+  envoyerEmail,
   estPresenceActive,
 } from "@/lib/api";
 import type {
@@ -26,6 +28,7 @@ import type {
   PointTemperature,
   PointHumidite,
   PointGaz,
+  ConfigAlertes,
 } from "@/types";
 import {
   LineChart,
@@ -133,22 +136,22 @@ function construireHistorique(
 
 function appliquerLectures(
   dispositifs: Dispositif[],
-  lectures: Lecture[]
+  lectures: Lecture[],
+  config: ConfigAlertes
 ): Dispositif[] {
   const parDevice = new Map<string, Lecture>();
   for (const lecture of lectures) parDevice.set(lecture.device_id, lecture);
+
+  const tempMax = config.temp_max ?? 28;
+  const tempMin = config.temp_min ?? 18;
+  const humMax = config.hum_max ?? 80;
+  const humMin = config.hum_min ?? 20;
+  const gazMax = config.gaz_max ?? 60;
 
   return dispositifs.map((dispositif) => {
     const idBD = getDeviceIdBd(dispositif.baseId);
     const lecture = idBD ? parDevice.get(idBD) : undefined;
     if (!lecture) return dispositif;
-
-    const seuils = getSeuilsCapteur(dispositif.baseId);
-    const tempMax = seuils?.temperatureMax ?? 28;
-    const tempMin = seuils?.temperatureMin ?? 18;
-    const humMax = seuils?.humiditeMax ?? 80;
-    const humMin = seuils?.humiditeMin ?? 20;
-    const gazMax = seuils?.gazMax ?? 60;
 
     return {
       ...dispositif,
@@ -188,6 +191,30 @@ function appliquerLectures(
       }),
     };
   });
+}
+
+const verrousAlerte = new Set<string>();
+
+function cleVerrou(baseId: string, type: string): string {
+  return `${baseId}:${type}`;
+}
+
+function traiterFranchissements(dispositifs: Dispositif[]): void {
+  for (const d of dispositifs) {
+    for (const c of d.capteurs) {
+      const cle = cleVerrou(d.baseId, c.type);
+      if (c.etat === "danger") {
+        if (verrousAlerte.has(cle)) continue;
+        verrousAlerte.add(cle);
+        envoyerEmail({
+          titre: `ALERTE ${d.nom} — ${libelleTypeCapteur[c.type] ?? c.type}`,
+          message: `${c.nom} : ${c.valeur}${c.unite} — seuil critique dépassé (${d.nom}).`,
+        });
+      } else if (c.etat === "normal") {
+        verrousAlerte.delete(cle);
+      }
+    }
+  }
 }
 
 type Ecouteur = () => void;
@@ -268,7 +295,10 @@ function BlocsPresence({
   donnees: { heure: string; actif: boolean }[];
   nomDispositif: string;
 }) {
+  const [selection, setSelection] = useState<number | null>(null);
   const actifs = donnees.filter((p) => p.actif).length;
+  const bloque = selection !== null ? donnees[selection] : null;
+
   return (
     <div className="bg-[#243447] rounded-xl p-4 border border-[#334155]">
       <h3 className="text-white font-bold text-sm mb-1">Présence — 6h</h3>
@@ -277,16 +307,33 @@ function BlocsPresence({
       </p>
       <div className="flex flex-wrap gap-1">
         {donnees.map((p, i) => (
-          <div
+          <button
             key={i}
-            className={`w-3.5 h-3.5 rounded-sm ${
+            onClick={() => setSelection(selection === i ? null : i)}
+            aria-label={`${p.heure} — ${p.actif ? "Présence détectée" : "Aucun mouvement"}`}
+            className={`w-3.5 h-3.5 rounded-sm transition-all duration-100 ${
               p.actif ? "bg-[#FF9900] shadow-[0_0_6px_rgba(255,153,0,0.5)]" : "bg-[#334155]"
-            }`}
-            title={`${p.heure} — ${p.actif ? "Présence détectée" : "Aucun mouvement"}`}
+            } ${selection === i ? "ring-2 ring-white scale-110" : ""}`}
           />
         ))}
       </div>
-      <div className="flex items-center gap-4 mt-3">
+
+      <div className="mt-3 min-h-[2.5rem]">
+        {bloque ? (
+          <div className="bg-[#1A2332] border border-[#334155] rounded-lg px-3 py-2 flex items-center justify-between">
+            <span className="text-white text-sm font-semibold">{bloque.heure}</span>
+            <span className={`text-xs font-medium ${bloque.actif ? "text-[#FF9900]" : "text-[#94A3B8]"}`}>
+              {bloque.actif ? "Présence détectée" : "Aucun mouvement"}
+            </span>
+          </div>
+        ) : (
+          <p className="text-[#64748B] text-xs">
+            Cliquez sur un bloc pour afficher l&apos;heure correspondante.
+          </p>
+        )}
+      </div>
+
+      <div className="flex items-center gap-4 mt-1">
         <div className="flex items-center gap-1.5">
           <div className="w-3 h-3 rounded-sm bg-[#FF9900]" />
           <span className="text-[10px] text-[#94A3B8]">Détecté</span>
@@ -301,6 +348,16 @@ function BlocsPresence({
   );
 }
 
+function formaterDateReception(timestamp: string): string {
+  return new Date(timestamp).toLocaleDateString("fr-FR", {
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+}
+
 export default function DashboardPage() {
   const dispositifs = useSyncExternalStore(
     souscrire,
@@ -309,6 +366,7 @@ export default function DashboardPage() {
   );
   const [selection, setSelection] = useState<string>("tous");
   const [horsLigne, setHorsLigne] = useState(false);
+  const [derniereReception, setDerniereReception] = useState<string | null>(null);
   const [historiques, setHistoriques] = useState<
     Record<string, HistoriqueDispositif>
   >({});
@@ -318,13 +376,23 @@ export default function DashboardPage() {
     .join("|");
 
   async function rafraichirValeurs() {
-    const lectures = await obtenirCapteurs();
+    const [lectures, config] = await Promise.all([
+      obtenirCapteurs(),
+      obtenirConfigAlertes(),
+    ]);
     if (!lectures) {
       setHorsLigne(true);
       return;
     }
     setHorsLigne(false);
-    publier(appliquerLectures(lireSnapshot(), lectures));
+    const appliques = appliquerLectures(lireSnapshot(), lectures, config ?? {});
+    publier(appliques);
+    traiterFranchissements(appliques);
+    let derniere = "";
+    for (const lecture of lectures) {
+      if (!derniere || lecture.timestamp > derniere) derniere = lecture.timestamp;
+    }
+    if (derniere) setDerniereReception(derniere);
   }
 
   async function rafraichirHistorique() {
@@ -424,8 +492,17 @@ export default function DashboardPage() {
         {horsLigne && (
           <div className="bg-[#FF1744]/10 border border-[#FF1744]/25 rounded-xl p-3">
             <p className="text-[#FF1744] text-xs font-semibold">
-              Backend hors ligne — dernières données affichées
+              Vous êtes hors ligne
             </p>
+          </div>
+        )}
+
+        {derniereReception && (
+          <div className="bg-[#2979FF]/8 border border-[#2979FF]/15 rounded-xl p-3 flex items-center justify-between gap-3">
+            <span className="text-[#94A3B8] text-xs">Dernière réception</span>
+            <span className="text-white text-xs font-semibold">
+              {formaterDateReception(derniereReception)}
+            </span>
           </div>
         )}
 
@@ -481,6 +558,16 @@ export default function DashboardPage() {
                   >
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                    </svg>
+                  </Link>
+                  <Link
+                    href={`/seuils-capteur?id=${dispositif.baseId}`}
+                    aria-label={`Seuils ${dispositif.nom}`}
+                    className="w-9 h-9 rounded-xl flex items-center justify-center bg-[#00C853]/10 border border-[#00C853]/20 text-[#00C853] transition-all duration-200 hover:scale-105 active:scale-95"
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v3m0 12v3m9-9h-3M6 12H3m15.364-6.364l-2.12 2.12M7.757 16.243l-2.121 2.121m0-12.728l2.12 2.12m9.9 9.9l2.121 2.121" />
+                      <circle cx="12" cy="12" r="3.5" />
                     </svg>
                   </Link>
                   <button

@@ -33,6 +33,12 @@ const ROUTES = [
     description: "Mettre à jour la configuration d'alerte (champs partiels acceptés).",
   },
   {
+    methode: "POST",
+    route: "/api/notifications/envoyer",
+    description:
+      "Envoyer un email d'alerte (body : email, titre, message). Destinataire par défaut : alert_config.email.",
+  },
+  {
     methode: "GET",
     route: "/api/sante",
     description: "Vérification de disponibilité et de la connexion à la base.",
@@ -50,7 +56,7 @@ export default function Accueil() {
           color: "#ffffff",
         }}
       >
-        Protecteur — API
+        EYESHOME — API
       </h1>
       <p style={{ margin: "0 0 1.5rem", color: "#94a3b8", fontSize: "0.9rem" }}>
         Backend des données capteurs (PostgreSQL sur Render).

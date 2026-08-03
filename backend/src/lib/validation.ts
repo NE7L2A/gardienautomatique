@@ -111,6 +111,8 @@ export interface SaisieConfigAlerte {
   sms?: string;
   temp_min?: number;
   temp_max?: number;
+  hum_min?: number;
+  hum_max?: number;
   gaz_max?: number;
 }
 
@@ -147,6 +149,18 @@ export function validerConfigAlerte(
       return { ok: false, erreur: "temp_max doit être un nombre." };
     }
     sortie.temp_max = brut.temp_max;
+  }
+  if (brut.hum_min !== undefined) {
+    if (!estNombre(brut.hum_min)) {
+      return { ok: false, erreur: "hum_min doit être un nombre." };
+    }
+    sortie.hum_min = brut.hum_min;
+  }
+  if (brut.hum_max !== undefined) {
+    if (!estNombre(brut.hum_max)) {
+      return { ok: false, erreur: "hum_max doit être un nombre." };
+    }
+    sortie.hum_max = brut.hum_max;
   }
   if (brut.gaz_max !== undefined) {
     if (!Number.isInteger(brut.gaz_max)) {

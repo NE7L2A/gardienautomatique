@@ -8,6 +8,8 @@ interface LigneConfig extends LigneBd {
   sms: string | null;
   temp_min: string | null;
   temp_max: string | null;
+  hum_min: string | null;
+  hum_max: string | null;
   gaz_max: number | null;
 }
 
@@ -18,6 +20,8 @@ function convertir(l: LigneConfig) {
     sms: l.sms,
     temp_min: l.temp_min === null ? null : Number(l.temp_min),
     temp_max: l.temp_max === null ? null : Number(l.temp_max),
+    hum_min: l.hum_min === null ? null : Number(l.hum_min),
+    hum_max: l.hum_max === null ? null : Number(l.hum_max),
     gaz_max: l.gaz_max,
   };
 }
@@ -63,7 +67,9 @@ export async function PUT(req: NextRequest) {
            sms = COALESCE($2, sms),
            temp_min = COALESCE($3, temp_min),
            temp_max = COALESCE($4, temp_max),
-           gaz_max = COALESCE($5, gaz_max)
+           hum_min = COALESCE($5, hum_min),
+           hum_max = COALESCE($6, hum_max),
+           gaz_max = COALESCE($7, gaz_max)
        WHERE id = (SELECT id FROM alert_config ORDER BY id DESC LIMIT 1)
        RETURNING *`,
       [
@@ -71,6 +77,8 @@ export async function PUT(req: NextRequest) {
         c.sms ?? null,
         c.temp_min ?? null,
         c.temp_max ?? null,
+        c.hum_min ?? null,
+        c.hum_max ?? null,
         c.gaz_max ?? null,
       ]
     );

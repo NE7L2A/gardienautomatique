@@ -1,8 +1,8 @@
 {
-  "name": "Protecteur — Sécurité Domestique",
-  "short_name": "Protecteur",
+  "name": "EyesHome — Sécurité Domestique",
+  "short_name": "EyesHome",
   "description": "Système intelligent de sécurité domestique LoRaWAN",
-  "start_url": "/splash",
+  "start_url": "/",
   "display": "standalone",
   "background_color": "#1A2332",
   "theme_color": "#232F3E",

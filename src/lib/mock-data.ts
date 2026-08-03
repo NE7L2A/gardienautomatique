@@ -4,7 +4,6 @@ import type {
   Alerte,
   EvenementHistorique,
   ParametresNotification,
-  ParametresSMS,
   ParametresAlerte,
   PointTemperature,
   PointHumidite,
@@ -212,17 +211,10 @@ export const parametresNotificationDefaut: ParametresNotification = {
   activees: false,
   presences: true,
   temperatures: true,
-  flammes: true,
+  gaz: true,
+  humidites: true,
   rapportsQuotidiens: false,
   email: "",
-};
-
-export const parametresSMSDefaut: ParametresSMS = {
-  active: false,
-  numeroTelephone: "",
-  alertesPresence: true,
-  toutesLesAlertes: false,
-  urgenceUniquement: true,
 };
 
 export const parametresAlerteDefaut: ParametresAlerte = {
