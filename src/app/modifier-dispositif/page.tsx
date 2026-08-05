@@ -15,6 +15,10 @@ import {
   getContactNotification,
   sauvegarderContactNotification,
 } from "@/lib/store";
+import {
+  mettreAJourNomDispositif,
+  mettreAJourConfigAlerte,
+} from "@/lib/api";
 
 function useMounted(): boolean {
   return useSyncExternalStore(
@@ -156,6 +160,17 @@ function Formulaire({ baseId }: { baseId: string }) {
       telephone: sms,
       email,
     });
+
+    const idBDNet = idBD.trim();
+    const config = {
+      email: email.trim() || undefined,
+      sms: sms.trim() || undefined,
+      temp_min: parseFloat(temperatureMin) || undefined,
+      temp_max: parseFloat(temperatureMax) || undefined,
+      gaz_max: parseFloat(gazMax) || undefined,
+    };
+    void mettreAJourNomDispositif(idBDNet, nom.trim());
+    void mettreAJourConfigAlerte(config);
 
     setSucces(true);
     setTimeout(() => router.push("/"), 1500);

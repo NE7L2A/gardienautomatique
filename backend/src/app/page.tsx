@@ -33,6 +33,30 @@ const ROUTES = [
     description: "Mettre à jour la configuration d'alerte (champs partiels acceptés).",
   },
   {
+    methode: "POST",
+    route: "/api/envoi",
+    description:
+      "Envoyer réellement un SMS (Twilio) et/ou un email (SMTP). Body : message requis + sms/email optionnels (repli sur alert_config).",
+  },
+  {
+    methode: "GET",
+    route: "/api/rapport-quotidien",
+    description:
+      "Calculer les moyennes du jour par capteur (température, humidité, gaz) sans envoyer.",
+  },
+  {
+    methode: "POST",
+    route: "/api/rapport-quotidien",
+    description:
+      "Calculer les moyennes du jour et les envoyer par email au contact configuré.",
+  },
+  {
+    methode: "PUT",
+    route: "/api/dispositifs/[device_id]",
+    description:
+      "Renseigner le nom (métadonnée) d'un dispositif dans la base de données.",
+  },
+  {
     methode: "GET",
     route: "/api/sante",
     description: "Vérification de disponibilité et de la connexion à la base.",

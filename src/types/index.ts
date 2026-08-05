@@ -105,7 +105,8 @@ export interface ParametresNotification {
   activees: boolean;
   presences: boolean;
   temperatures: boolean;
-  flammes: boolean;
+  gaz: boolean;
+  humidites: boolean;
   rapportsQuotidiens: boolean;
   email: string;
 }

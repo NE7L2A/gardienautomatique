@@ -55,8 +55,8 @@ export default function SetupPage() {
         activees: notificationsActivees,
         presences: true,
         temperatures: true,
-        flammes: true,
-        batteries: false,
+        gaz: true,
+        humidites: true,
         rapportsQuotidiens: false,
         email: "",
       })

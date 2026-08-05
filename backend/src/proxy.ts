@@ -6,7 +6,7 @@ const entetesCors: Record<string, string> = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization",
 };
 
-export function middleware(requete: NextRequest) {
+export function proxy(requete: NextRequest) {
   if (requete.method === "OPTIONS") {
     return new NextResponse(null, { status: 204, headers: entetesCors });
   }

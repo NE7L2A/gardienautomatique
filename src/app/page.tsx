@@ -1,13 +1,13 @@
 "use client";
 
-import { useState, useEffect, useSyncExternalStore } from "react";
+import { useState, useEffect, useCallback, useRef, useSyncExternalStore } from "react";
 import Link from "next/link";
 import Header from "@/components/ui/Header";
 import Navigation from "@/components/ui/Navigation";
 import Semaphore from "@/components/dashboard/Semaphore";
 import CarteCapteur from "@/components/dashboard/CarteCapteur";
 import { alertesRecentes } from "@/lib/mock-data";
-import { supprimerDispositif, getSeuilsCapteur } from "@/lib/store";
+import { supprimerDispositif, getSeuilsCapteur, getParametresNotification } from "@/lib/store";
 import {
   construireDispositifs,
   grouperDispositifs,
@@ -19,8 +19,10 @@ import {
   obtenirCapteurs,
   obtenirMesures,
   estPresenceActive,
+  envoyerAlerte,
 } from "@/lib/api";
 import type {
+  Alerte,
   EtatCapteur,
   Lecture,
   PointTemperature,
@@ -268,7 +270,9 @@ function BlocsPresence({
   donnees: { heure: string; actif: boolean }[];
   nomDispositif: string;
 }) {
+  const [selection, setSelection] = useState<number | null>(null);
   const actifs = donnees.filter((p) => p.actif).length;
+  const blocSelectionne = selection !== null ? donnees[selection] : null;
   return (
     <div className="bg-[#243447] rounded-xl p-4 border border-[#334155]">
       <h3 className="text-white font-bold text-sm mb-1">Présence — 6h</h3>
@@ -279,13 +283,26 @@ function BlocsPresence({
         {donnees.map((p, i) => (
           <div
             key={i}
-            className={`w-3.5 h-3.5 rounded-sm ${
-              p.actif ? "bg-[#FF9900] shadow-[0_0_6px_rgba(255,153,0,0.5)]" : "bg-[#334155]"
-            }`}
-            title={`${p.heure} — ${p.actif ? "Présence détectée" : "Aucun mouvement"}`}
+            onClick={() => setSelection(selection === i ? null : i)}
+            className={`w-3.5 h-3.5 rounded-sm cursor-pointer transition-transform active:scale-125 ${
+              p.actif
+                ? "bg-[#FF9900] shadow-[0_0_6px_rgba(255,153,0,0.5)]"
+                : "bg-[#334155]"
+            } ${selection === i ? "ring-2 ring-[#2979FF]" : ""}`}
+            aria-label={`${p.heure} — ${p.actif ? "Présence détectée" : "Aucun mouvement"}`}
           />
         ))}
       </div>
+      {blocSelectionne && (
+        <div className="mt-3 bg-[#2979FF]/10 border border-[#2979FF]/25 rounded-lg px-3 py-2 animate-fondu">
+          <p className="text-[#2979FF] text-xs font-semibold">
+            {blocSelectionne.heure} —{" "}
+            {blocSelectionne.actif
+              ? "Présence détectée"
+              : "Aucun mouvement"}
+          </p>
+        </div>
+      )}
       <div className="flex items-center gap-4 mt-3">
         <div className="flex items-center gap-1.5">
           <div className="w-3 h-3 rounded-sm bg-[#FF9900]" />
@@ -295,7 +312,9 @@ function BlocsPresence({
           <div className="w-3 h-3 rounded-sm bg-[#334155]" />
           <span className="text-[10px] text-[#94A3B8]">Aucun mouvement</span>
         </div>
-        <span className="text-[10px] text-[#64748B] ml-auto">Chaque bloc = 3 min</span>
+        <span className="text-[10px] text-[#64748B] ml-auto">
+          Touchez un bloc pour voir l&apos;heure · chaque bloc = 3 min
+        </span>
       </div>
     </div>
   );
@@ -309,25 +328,107 @@ export default function DashboardPage() {
   );
   const [selection, setSelection] = useState<string>("tous");
   const [horsLigne, setHorsLigne] = useState(false);
+  const [derniereReception, setDerniereReception] = useState<string | null>(
+    null
+  );
   const [historiques, setHistoriques] = useState<
     Record<string, HistoriqueDispositif>
   >({});
+  const alertesEnvoyeesRef = useRef<Set<string>>(new Set());
+  const [alertesLive, setAlertesLive] = useState<Alerte[]>([]);
 
   const cleDispositifs = dispositifs
     .map((d) => `${d.baseId}:${getDeviceIdBd(d.baseId) ?? ""}`)
     .join("|");
 
-  async function rafraichirValeurs() {
+  const envoyerAlertesDanger = useCallback((dispositifsActualises: Dispositif[]) => {
+    const parametres = getParametresNotification();
+    const typeAutorise: Record<string, boolean> = {
+      temperature: parametres.activees && parametres.temperatures,
+      humidite: parametres.activees && parametres.humidites,
+      gaz: parametres.activees && parametres.gaz,
+      presence: parametres.activees && parametres.presences,
+    };
+    const dangerActifs = new Set<string>();
+    const nouvellesAlertes: Alerte[] = [];
+    for (const dispositif of dispositifsActualises) {
+      const idBD = getDeviceIdBd(dispositif.baseId);
+      if (!idBD) continue;
+      for (const capteur of dispositif.capteurs) {
+        if (capteur.etat !== "danger") continue;
+        const cle = `${idBD}:${capteur.type}`;
+        dangerActifs.add(cle);
+        if (!typeAutorise[capteur.type]) continue;
+
+        const valeur =
+          typeof capteur.valeur === "number" ? capteur.valeur : null;
+        const seuils = getSeuilsCapteur(dispositif.baseId);
+        let message: string | null = null;
+        if (capteur.type === "temperature" && valeur !== null) {
+          const max = seuils?.temperatureMax ?? 28;
+          message = `Température critique : ${valeur}°C — ${dispositif.nom} (seuil ${max}°C). Action immédiate requise.`;
+        } else if (capteur.type === "humidite" && valeur !== null) {
+          const humMax = seuils?.humiditeMax ?? 80;
+          message = `Humidité ${
+            valeur >= humMax ? "excessive" : "insuffisante"
+          } : ${valeur}% — ${dispositif.nom}.`;
+        } else if (capteur.type === "gaz" && valeur !== null) {
+          message = `Concentration de gaz dangereuse : ${valeur}% — ${dispositif.nom}. Action immédiate requise.`;
+        } else if (capteur.type === "presence") {
+          message = `Présence non autorisée détectée — ${dispositif.nom}.`;
+        }
+        if (!message) continue;
+        if (alertesEnvoyeesRef.current.has(cle)) continue;
+
+        alertesEnvoyeesRef.current.add(cle);
+        nouvellesAlertes.push({
+          id: `alt-${Date.now()}-${capteur.type}`,
+          type: capteur.type,
+          niveau: "danger",
+          canal: "push",
+          message,
+          timestamp: new Date().toISOString(),
+          lue: false,
+          envoyee: true,
+        });
+        void envoyerAlerte({
+          message,
+          sujet: `EYESHOME — Alerte ${capteur.type}`,
+        });
+      }
+    }
+    for (const cle of Array.from(alertesEnvoyeesRef.current)) {
+      const typeCle = cle.slice(cle.indexOf(":") + 1);
+      if (!dangerActifs.has(cle) || !typeAutorise[typeCle]) {
+        alertesEnvoyeesRef.current.delete(cle);
+      }
+    }
+    if (nouvellesAlertes.length > 0) {
+      setAlertesLive((prec) => [...nouvellesAlertes, ...prec].slice(0, 10));
+    }
+  }, []);
+
+  const rafraichirValeurs = useCallback(async () => {
     const lectures = await obtenirCapteurs();
     if (!lectures) {
       setHorsLigne(true);
       return;
     }
     setHorsLigne(false);
-    publier(appliquerLectures(lireSnapshot(), lectures));
-  }
+    const plusRecent = lectures.reduce(
+      (plus, lecture) => {
+        const t = new Date(lecture.timestamp).getTime();
+        return t > plus ? t : plus;
+      },
+      0
+    );
+    if (plusRecent > 0) setDerniereReception(new Date(plusRecent).toISOString());
+    const dispositifsActualises = appliquerLectures(lireSnapshot(), lectures);
+    publier(dispositifsActualises);
+    envoyerAlertesDanger(dispositifsActualises);
+  }, [envoyerAlertesDanger]);
 
-  async function rafraichirHistorique() {
+  const rafraichirHistorique = useCallback(async () => {
     const courants = lireSnapshot();
     const maintenant = new Date().toISOString();
     const debut24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
@@ -353,7 +454,7 @@ export default function DashboardPage() {
       if (r24) result[d.baseId] = construireHistorique(r24, r6 ?? []);
     }
     setHistoriques(result);
-  }
+  }, []);
 
   useEffect(() => {
     actualiserDepuisStockage();
@@ -365,11 +466,11 @@ export default function DashboardPage() {
       clearInterval(intervalValeurs);
       clearInterval(intervalHistorique);
     };
-  }, []);
+  }, [rafraichirValeurs, rafraichirHistorique]);
 
   useEffect(() => {
     setTimeout(rafraichirHistorique, 0);
-  }, [cleDispositifs]);
+  }, [cleDispositifs, rafraichirHistorique]);
 
   const dispositifsVisibles =
     selection === "tous"
@@ -424,7 +525,16 @@ export default function DashboardPage() {
         {horsLigne && (
           <div className="bg-[#FF1744]/10 border border-[#FF1744]/25 rounded-xl p-3">
             <p className="text-[#FF1744] text-xs font-semibold">
-              Backend hors ligne — dernières données affichées
+              Serveur de données injoignable — affichage des dernières valeurs
+              reçues{derniereReception ? ` à ${formaterHeure(derniereReception)}` : ""}.
+            </p>
+          </div>
+        )}
+
+        {!horsLigne && derniereReception && (
+          <div className="bg-[#00C853]/8 border border-[#00C853]/20 rounded-xl p-3">
+            <p className="text-[#00C853] text-xs font-semibold">
+              Dernière réception des données : {formaterHeure(derniereReception)}
             </p>
           </div>
         )}
@@ -442,13 +552,13 @@ export default function DashboardPage() {
           />
         </div>
 
-        {alertesRecentes.filter((a) => !a.lue).length > 0 && (
+        {(alertesLive.length > 0 ||
+          alertesRecentes.filter((a) => !a.lue).length > 0) && (
           <div className="bg-[#FF9900]/8 border border-[#FF9900]/20 rounded-xl p-3">
             <p className="text-[#FF9900] text-xs font-semibold mb-1 uppercase tracking-wider">
               Alertes récentes
             </p>
-            {alertesRecentes
-              .filter((a) => !a.lue)
+            {[...alertesLive, ...alertesRecentes.filter((a) => !a.lue)]
               .slice(0, 2)
               .map((alerte) => (
                 <p key={alerte.id} className="text-white text-sm">
@@ -461,6 +571,14 @@ export default function DashboardPage() {
         {dispositifsVisibles.map((dispositif) => {
           const hist = historiques[dispositif.baseId];
           const idBD = getDeviceIdBd(dispositif.baseId);
+          const derniereReceptionDispositif = dispositif.capteurs.reduce(
+            (plus, c) => {
+              const t = new Date(c.derniereMiseAJour).getTime();
+              if (isNaN(t)) return plus;
+              return t > plus ? t : plus;
+            },
+            0
+          );
           return (
             <section key={dispositif.baseId} className="space-y-5">
               <div className="flex items-center justify-between gap-3">
@@ -472,6 +590,15 @@ export default function DashboardPage() {
                     {dispositif.capteurs.length} mesure(s) en temps réel
                     {idBD ? ` · ${idBD}` : ""}
                   </p>
+                  {derniereReceptionDispositif > 0 && (
+                    <p className="text-[#00C853] text-xs mt-0.5">
+                      Dernière réception :{" "}
+                      {new Date(derniereReceptionDispositif).toLocaleTimeString(
+                        "fr-FR",
+                        { hour: "2-digit", minute: "2-digit", second: "2-digit" }
+                      )}
+                    </p>
+                  )}
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   <Link

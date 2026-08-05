@@ -14,6 +14,10 @@ import {
   sauvegarderDispositifInfos,
 } from "@/lib/store";
 import { validerEmail, validerTelephone } from "@/lib/validators";
+import {
+  mettreAJourNomDispositif,
+  mettreAJourConfigAlerte,
+} from "@/lib/api";
 import type { SeuilsCapteur } from "@/types";
 
 export default function AjouterCapteurPage() {
@@ -122,6 +126,15 @@ export default function AjouterCapteurPage() {
     sauvegarderContactNotification({
       telephone: sms,
       email,
+    });
+
+    void mettreAJourNomDispositif(idBD.trim(), nom.trim());
+    void mettreAJourConfigAlerte({
+      email: email.trim() || undefined,
+      sms: sms.trim() || undefined,
+      temp_min: parseFloat(temperatureMin) || undefined,
+      temp_max: parseFloat(temperatureMax) || undefined,
+      gaz_max: parseFloat(gazMax) || undefined,
     });
 
     setSucces(true);

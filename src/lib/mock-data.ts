@@ -9,6 +9,7 @@ import type {
   PointTemperature,
   PointHumidite,
   PointGaz,
+  EtatSalle,
 } from "@/types";
 
 const MAINTENANT = new Date();
@@ -116,15 +117,13 @@ export function etatsSalles(salles: Salle[]): EtatSalle[] {
   });
 }
 
-import type { EtatSalle } from "@/types";
-
 export const alertesRecentes: Alerte[] = [
   {
     id: "alt-001",
     type: "presence",
     niveau: "warning",
     canal: "push",
-    message: "Mouvement détecté dans Salle Test",
+    message: "Mouvement détecté — Salle Test. À vérifier.",
     timestamp: h(1).toISOString(),
     lue: false,
     envoyee: true,
@@ -134,7 +133,7 @@ export const alertesRecentes: Alerte[] = [
     type: "temperature",
     niveau: "info",
     canal: "email",
-    message: "Température maximale atteinte : 28°C dans Salle Test",
+    message: "Température maximale atteinte : 28°C — Salle Test.",
     timestamp: h(2).toISOString(),
     lue: true,
     envoyee: true,
@@ -179,14 +178,14 @@ export const historiqueEvenements: EvenementHistorique[] = [
     type: "gaz",
     niveau: "info",
     titre: "Gaz normal",
-    description: "Concentration gaz stable à 45 ppm",
+    description: "Concentration de gaz stable à 45 ppm",
     timestamp: h(2).toISOString(),
   },
   {
     id: "hist-006",
     type: "humidite",
     niveau: "warning",
-    titre: "Humidité élevée",
+    titre: "Humidité excessive",
     description: "Taux d'humidité à 82% — risque de condensation",
     timestamp: h(5).toISOString(),
   },
@@ -212,7 +211,8 @@ export const parametresNotificationDefaut: ParametresNotification = {
   activees: false,
   presences: true,
   temperatures: true,
-  flammes: true,
+  gaz: true,
+  humidites: true,
   rapportsQuotidiens: false,
   email: "",
 };

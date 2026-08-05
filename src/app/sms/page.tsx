@@ -9,34 +9,63 @@ import Bouton from "@/components/ui/Bouton";
 import type { ParametresSMS } from "@/types";
 import { getParametresSMS, sauvegarderParametresSMS } from "@/lib/store";
 import { validerTelephone } from "@/lib/validators";
+import { envoyerAlerte } from "@/lib/api";
 
 export default function SMSPage() {
   const [parametres, setParametres] = useState<ParametresSMS>(
     getParametresSMS()
   );
-  const [messageTest, setMessageTest] = useState("");
+  const [message, setMessage] = useState("");
+  const [typeMessage, setTypeMessage] = useState<"ok" | "err">("ok");
   const [telErreur, setTelErreur] = useState("");
+  const [envoiEnCours, setEnvoiEnCours] = useState(false);
 
   useEffect(() => {
     sauvegarderParametresSMS(parametres);
   }, [parametres]);
 
-  const envoyerTestSMS = () => {
+  const afficherMessage = (texte: string, type: "ok" | "err") => {
+    setMessage(texte);
+    setTypeMessage(type);
+    setTimeout(() => setMessage(""), 6000);
+  };
+
+  const envoyerTestSMS = async () => {
     if (!parametres.numeroTelephone) {
-      setMessageTest("Veuillez d'abord renseigner un numéro");
-      setTimeout(() => setMessageTest(""), 3000);
+      afficherMessage("Veuillez d'abord renseigner un numéro", "err");
       return;
     }
     const err = validerTelephone(parametres.numeroTelephone);
     if (err) {
-      setMessageTest(err);
-      setTimeout(() => setMessageTest(""), 3000);
+      afficherMessage(err, "err");
       return;
     }
-    setMessageTest(
-      `SMS de test envoyé au ${parametres.numeroTelephone} (mock)`
-    );
-    setTimeout(() => setMessageTest(""), 3000);
+    setEnvoiEnCours(true);
+    const reponse = await envoyerAlerte({
+      message:
+        "EYESHOME — Test SMS : votre système de sécurité fonctionne correctement.",
+      sms: parametres.numeroTelephone,
+    });
+    setEnvoiEnCours(false);
+
+    if (!reponse) {
+      afficherMessage("Serveur de données injoignable — envoi impossible.", "err");
+      return;
+    }
+    const resultat = reponse.resultats?.[0];
+    if (resultat?.statut === "envoye") {
+      afficherMessage(`SMS envoyé à ${resultat.destinataire}`, "ok");
+    } else if (resultat?.statut === "non_configuré") {
+      afficherMessage(
+        "Envoi SMS non configuré côté serveur (clés Twilio manquantes).",
+        "err"
+      );
+    } else {
+      afficherMessage(
+        `Échec de l'envoi : ${resultat?.erreur || reponse.erreur || "erreur inconnue"}`,
+        "err"
+      );
+    }
   };
 
   return (
@@ -121,26 +150,25 @@ export default function SMSPage() {
           </Carte>
         </section>
 
-        <Bouton onClick={envoyerTestSMS} variante="secondaire">
-          Envoyer un SMS de test
+        <Bouton onClick={envoyerTestSMS} variante="secondaire" desactive={envoiEnCours}>
+          {envoiEnCours ? "Envoi en cours..." : "Envoyer un SMS de test"}
         </Bouton>
 
-        {messageTest && (
+        {message && (
           <p
             className={`text-sm text-center ${
-              messageTest.includes("Veuillez")
-                ? "text-[#FF1744]"
-                : "text-[#00C853]"
+              typeMessage === "err" ? "text-[#FF1744]" : "text-[#00C853]"
             }`}
           >
-            {messageTest}
+            {message}
           </p>
         )}
 
         <div className="bg-[#2979FF]/8 border border-[#2979FF]/15 rounded-xl p-3">
           <p className="text-[#2979FF] text-xs text-center leading-relaxed">
-            Mode simulation — L&apos;envoi de SMS sera activé lorsque la passerelle
-            Twilio sera connectée au backend.
+            L&apos;envoi utilise le service Twilio du backend. Configurez les
+            clés (TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM_NUMBER)
+            côté serveur pour activer l&apos;envoi réel.
           </p>
         </div>
       </main>

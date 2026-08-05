@@ -12,6 +12,7 @@ import { getParametresNotification,
   sauvegarderParametresNotification,
 } from "@/lib/store";
 import { validerEmail } from "@/lib/validators";
+import { envoyerRapportQuotidien, mettreAJourConfigAlerte } from "@/lib/api";
 
 const CLE_ALERTES_LUES = "protecteur_alertes_lues";
 
@@ -60,8 +61,10 @@ export default function NotificationsPage() {
     getParametresNotification()
   );
   const [alertesLues, setAlertesLues] = useState<string[]>(getAlertesLues);
-  const [messageTest, setMessageTest] = useState("");
   const [emailErreur, setEmailErreur] = useState("");
+  const [rapportEnCours, setRapportEnCours] = useState(false);
+  const [messageRapport, setMessageRapport] = useState("");
+  const [typeRapport, setTypeRapport] = useState<"ok" | "err">("ok");
 
   useEffect(() => {
     sauvegarderParametresNotification(parametres);
@@ -72,9 +75,40 @@ export default function NotificationsPage() {
     lue: alertesLues.includes(a.id),
   }));
 
-  const testerNotification = () => {
-    setMessageTest("Notification de test envoyée !");
-    setTimeout(() => setMessageTest(""), 3000);
+  const envoyerRapport = async () => {
+    setMessageRapport("");
+    if (!parametres.email) {
+      setTypeRapport("err");
+      setMessageRapport("Renseignez d'abord un email de réception.");
+      return;
+    }
+    const err = validerEmail(parametres.email);
+    if (err) {
+      setTypeRapport("err");
+      setMessageRapport(err);
+      return;
+    }
+    setRapportEnCours(true);
+    const reponse = await envoyerRapportQuotidien(parametres.email);
+    setRapportEnCours(false);
+
+    if (!reponse) {
+      setTypeRapport("err");
+      setMessageRapport("Serveur de données injoignable — envoi impossible.");
+      return;
+    }
+    if (reponse.resultat?.statut === "envoye") {
+      setTypeRapport("ok");
+      setMessageRapport(
+        `Rapport envoyé à ${reponse.resultat.destinataire} (moyennes du jour).`
+      );
+    } else if (reponse.resultat?.statut === "non_configuré") {
+      setTypeRapport("err");
+      setMessageRapport("Envoi email non configuré côté serveur (SMTP manquant).");
+    } else {
+      setTypeRapport("err");
+      setMessageRapport(reponse.erreur || "Échec de l'envoi du rapport.");
+    }
   };
 
   const marquerToutLu = () => {
@@ -104,6 +138,9 @@ export default function NotificationsPage() {
                 if (parametres.email) {
                   const err = validerEmail(parametres.email);
                   setEmailErreur(err || "");
+                  if (!err) {
+                    void mettreAJourConfigAlerte({ email: parametres.email.trim() });
+                  }
                 }
               }}
               placeholder="exemple@email.com"
@@ -120,7 +157,7 @@ export default function NotificationsPage() {
 
         <section>
           <h2 className="text-white font-bold text-base mb-3">
-            Paramètres push
+            Alertes automatiques
           </h2>
           <Carte>
             <div className="divide-y divide-[#334155]">
@@ -129,8 +166,8 @@ export default function NotificationsPage() {
                 onChange={(v) =>
                   setParametres({ ...parametres, activees: v })
                 }
-                label="Notifications push"
-                description="Recevoir des alertes sur votre téléphone"
+                label="Notifications automatiques"
+                description="Alerte dans l'app + envoi par email/SMS selon vos choix"
               />
               <Switch
                 checked={parametres.presences}
@@ -138,7 +175,7 @@ export default function NotificationsPage() {
                   setParametres({ ...parametres, presences: v })
                 }
                 label="Présence"
-                description="Alerte mouvement non autorisé"
+                description="Mouvement non autorisé → alerte in-app + email/SMS"
                 disabled={!parametres.activees}
               />
               <Switch
@@ -147,16 +184,25 @@ export default function NotificationsPage() {
                   setParametres({ ...parametres, temperatures: v })
                 }
                 label="Température"
-                description="Alerte seuil critique de température"
+                description="Seuil critique dépassé → alerte in-app + email/SMS"
                 disabled={!parametres.activees}
               />
               <Switch
-                checked={parametres.flammes}
+                checked={parametres.gaz}
                 onChange={(v) =>
-                  setParametres({ ...parametres, flammes: v })
+                  setParametres({ ...parametres, gaz: v })
                 }
-                label="Flamme"
-                description="Alerte détection de feu"
+                label="Gaz"
+                description="Concentration de gaz dangereuse → alerte in-app + email/SMS"
+                disabled={!parametres.activees}
+              />
+              <Switch
+                checked={parametres.humidites}
+                onChange={(v) =>
+                  setParametres({ ...parametres, humidites: v })
+                }
+                label="Humidité"
+                description="Taux d'humidité anormal → alerte in-app + email/SMS"
                 disabled={!parametres.activees}
               />
               <Switch
@@ -165,18 +211,30 @@ export default function NotificationsPage() {
                   setParametres({ ...parametres, rapportsQuotidiens: v })
                 }
                 label="Rapport quotidien"
-                description="Résumé journalier de l'état du système"
+                description="Moyennes journalières de chaque capteur par e-mail"
                 disabled={!parametres.activees}
               />
             </div>
           </Carte>
         </section>
 
-        <Bouton onClick={testerNotification} variante="secondaire">
-          Tester une notification
+        <Bouton
+          onClick={envoyerRapport}
+          variante="secondaire"
+          desactive={rapportEnCours}
+        >
+          {rapportEnCours
+            ? "Envoi du rapport en cours..."
+            : "Envoyer le rapport quotidien maintenant"}
         </Bouton>
-        {messageTest && (
-          <p className="text-[#00C853] text-sm text-center">{messageTest}</p>
+        {messageRapport && (
+          <p
+            className={`text-sm text-center ${
+              typeRapport === "err" ? "text-[#FF1744]" : "text-[#00C853]"
+            }`}
+          >
+            {messageRapport}
+          </p>
         )}
 
         <section>

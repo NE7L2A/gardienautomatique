@@ -8,6 +8,7 @@ import Navigation from "@/components/ui/Navigation";
 import Carte from "@/components/ui/Carte";
 import Bouton from "@/components/ui/Bouton";
 import { validerEmail, validerTelephone } from "@/lib/validators";
+import { mettreAJourConfigAlerte } from "@/lib/api";
 import type { ThemeNom } from "@/types";
 
 const THEMES: { valeur: ThemeNom; label: string; description: string; icone: string }[] = [
@@ -82,18 +83,16 @@ export default function ParametresPage() {
     };
     localStorage.setItem("protecteur_utilisateur", JSON.stringify(utilisateur));
     localStorage.setItem("protecteur_theme", JSON.stringify(theme));
+    void mettreAJourConfigAlerte({
+      email: email.trim() || undefined,
+      sms: telephone.trim() || undefined,
+    });
     setMessage("Profil sauvegardé");
     setTimeout(() => setMessage(""), 2500);
   };
 
-  const deconnecter = () => {
-    const etatStr = localStorage.getItem("protecteur_etat_app");
-    if (etatStr) {
-      const etat = JSON.parse(etatStr);
-      etat.utilisateurConnecte = false;
-      localStorage.setItem("protecteur_etat_app", JSON.stringify(etat));
-    }
-    router.replace("/connexion");
+  const retourAccueil = () => {
+    router.replace("/");
   };
 
   const reinitialiser = () => {
@@ -261,8 +260,8 @@ export default function ParametresPage() {
           <Bouton onClick={sauvegarder}>
             Sauvegarder le profil
           </Bouton>
-          <Bouton onClick={deconnecter} variante="secondaire">
-            Se déconnecter
+          <Bouton onClick={retourAccueil} variante="secondaire">
+            Retour à l&apos;accueil
           </Bouton>
           <Bouton onClick={reinitialiser} variante="danger">
             Réinitialiser l&apos;application

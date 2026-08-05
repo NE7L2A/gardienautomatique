@@ -138,16 +138,6 @@ export default function InscriptionPage() {
         <div className="pt-2">
           <Bouton onClick={gererSoumission}>S&apos;inscrire</Bouton>
         </div>
-
-        <p className="text-center text-[#64748B] text-sm pt-2">
-          Déjà un compte ?{" "}
-          <button
-            onClick={() => router.push("/connexion")}
-            className="text-[#FF9900] font-semibold"
-          >
-            Se connecter
-          </button>
-        </p>
       </div>
     </div>
   );
