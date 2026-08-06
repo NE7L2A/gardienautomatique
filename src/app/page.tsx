@@ -6,7 +6,7 @@ import Header from "@/components/ui/Header";
 import Navigation from "@/components/ui/Navigation";
 import Semaphore from "@/components/dashboard/Semaphore";
 import CarteCapteur from "@/components/dashboard/CarteCapteur";
-import { alertesRecentes } from "@/lib/mock-data";
+import { alertesRecentes, genererHistoriqueTemperature, genererHistoriqueHumidite, genererHistoriqueGaz, genererPresenceQuotidienne } from "@/lib/mock-data";
 import { supprimerDispositif, getSeuilsCapteur, getParametresNotification } from "@/lib/store";
 import {
   construireDispositifs,
@@ -131,6 +131,32 @@ function construireHistorique(
 
   result.presence = construireBlocsPresence(lectures6);
   return result;
+}
+
+function construireHistoriqueRepli(
+  dispositif: Dispositif
+): HistoriqueDispositif {
+  const nom = dispositif.nom;
+  const seed = Array.from(dispositif.baseId).reduce(
+    (somme, ch) => somme + ch.charCodeAt(0),
+    0
+  );
+  return {
+    temperature: genererHistoriqueTemperature(seed, nom),
+    humidite: genererHistoriqueHumidite(seed, nom),
+    gaz: genererHistoriqueGaz(seed, nom),
+    presence: genererPresenceQuotidienne(6),
+  };
+}
+
+function obtenirHistoriqueRepli(
+  dispositif: Dispositif,
+  cache: Record<string, HistoriqueDispositif>
+): HistoriqueDispositif {
+  if (!cache[dispositif.baseId]) {
+    cache[dispositif.baseId] = construireHistoriqueRepli(dispositif);
+  }
+  return cache[dispositif.baseId];
 }
 
 function appliquerLectures(
@@ -266,9 +292,11 @@ function Graphique({
 function BlocsPresence({
   donnees,
   nomDispositif,
+  noteRepli,
 }: {
   donnees: { heure: string; actif: boolean }[];
   nomDispositif: string;
+  noteRepli?: boolean;
 }) {
   const [selection, setSelection] = useState<number | null>(null);
   const actifs = donnees.filter((p) => p.actif).length;
@@ -278,6 +306,7 @@ function BlocsPresence({
       <h3 className="text-white font-bold text-sm mb-1">Présence — 6h</h3>
       <p className="text-[#64748B] text-xs mb-3">
         {actifs} blocs actifs sur {donnees.length} — {nomDispositif}
+        {noteRepli ? " · données de démonstration" : ""}
       </p>
       <div className="flex flex-wrap gap-1">
         {donnees.map((p, i) => (
@@ -336,6 +365,10 @@ export default function DashboardPage() {
   >({});
   const alertesEnvoyeesRef = useRef<Set<string>>(new Set());
   const [alertesLive, setAlertesLive] = useState<Alerte[]>([]);
+  const historiquesRepliRef = useRef<Record<string, HistoriqueDispositif>>({});
+  const [historiquesRepli, setHistoriquesRepli] = useState<
+    Record<string, boolean>
+  >({});
 
   const cleDispositifs = dispositifs
     .map((d) => `${d.baseId}:${getDeviceIdBd(d.baseId) ?? ""}`)
@@ -434,9 +467,14 @@ export default function DashboardPage() {
     const debut24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
     const debut6h = new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString();
     const result: Record<string, HistoriqueDispositif> = {};
+    const enRepli: Record<string, boolean> = {};
     for (const d of courants) {
       const idBD = getDeviceIdBd(d.baseId);
-      if (!idBD) continue;
+      if (!idBD) {
+        result[d.baseId] = obtenirHistoriqueRepli(d, historiquesRepliRef.current);
+        enRepli[d.baseId] = true;
+        continue;
+      }
       const [r24, r6] = await Promise.all([
         obtenirMesures({
           device_id: idBD,
@@ -451,9 +489,15 @@ export default function DashboardPage() {
           limit: 2000,
         }),
       ]);
-      if (r24) result[d.baseId] = construireHistorique(r24, r6 ?? []);
+      if (r24 && r24.length > 0) {
+        result[d.baseId] = construireHistorique(r24, r6 ?? []);
+      } else {
+        result[d.baseId] = obtenirHistoriqueRepli(d, historiquesRepliRef.current);
+        enRepli[d.baseId] = true;
+      }
     }
     setHistoriques(result);
+    setHistoriquesRepli(enRepli);
   }, []);
 
   useEffect(() => {
@@ -571,6 +615,8 @@ export default function DashboardPage() {
         {dispositifsVisibles.map((dispositif) => {
           const hist = historiques[dispositif.baseId];
           const idBD = getDeviceIdBd(dispositif.baseId);
+          const enRepli = historiquesRepli[dispositif.baseId] === true;
+          const noteRepli = enRepli ? " · données de démonstration" : "";
           const derniereReceptionDispositif = dispositif.capteurs.reduce(
             (plus, c) => {
               const t = new Date(c.derniereMiseAJour).getTime();
@@ -640,7 +686,7 @@ export default function DashboardPage() {
               {hist?.temperature && (
                 <Graphique
                   titre="Température — 24h"
-                  sousTitre={`Évolution ${dispositif.nom}`}
+                  sousTitre={`Évolution ${dispositif.nom}${noteRepli}`}
                   data={hist.temperature}
                   dataKey="temperature"
                   couleur="#FF9900"
@@ -651,7 +697,7 @@ export default function DashboardPage() {
               {hist?.humidite && (
                 <Graphique
                   titre="Humidité — 24h"
-                  sousTitre={`Taux d'humidité ${dispositif.nom}`}
+                  sousTitre={`Taux d'humidité ${dispositif.nom}${noteRepli}`}
                   data={hist.humidite}
                   dataKey="humidite"
                   couleur="#2979FF"
@@ -663,7 +709,7 @@ export default function DashboardPage() {
               {hist?.gaz && (
                 <Graphique
                   titre="Gaz — 24h"
-                  sousTitre={`Concentration (%) ${dispositif.nom}`}
+                  sousTitre={`Concentration (%) ${dispositif.nom}${noteRepli}`}
                   data={hist.gaz}
                   dataKey="gaz"
                   couleur="#FF5722"
@@ -676,6 +722,7 @@ export default function DashboardPage() {
                 <BlocsPresence
                   donnees={hist.presence}
                   nomDispositif={dispositif.nom}
+                  noteRepli={enRepli}
                 />
               )}
             </section>
