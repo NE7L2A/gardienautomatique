@@ -5,6 +5,7 @@ import Header from "@/components/ui/Header";
 import Navigation from "@/components/ui/Navigation";
 import Carte from "@/components/ui/Carte";
 import Switch from "@/components/ui/Switch";
+import IconeCapteur from "@/components/ui/IconeCapteur";
 import { alertesRecentes as alertesMock } from "@/lib/mock-data";
 import type { Alerte, ParametresNotification } from "@/types";
 import { getParametresNotification,
@@ -31,31 +32,7 @@ function sauvegarderAlertesLues(ids: string[]): void {
 }
 
 function IconeAlerte({ type }: { type: string }) {
-  if (type === "presence")
-    return (
-      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-        <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-      </svg>
-    );
-  if (type === "gaz")
-    return (
-      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M3 12h1m8-9v1m8 8h1M5.64 5.64l.7.7M18.36 5.64l-.7.7" />
-        <path strokeLinecap="round" strokeLinejoin="round" d="M12 8a5 5 0 00-5 5v1a5 5 0 0010 0v-1a5 5 0 00-5-5z" />
-      </svg>
-    );
-  if (type === "humidite")
-    return (
-      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M12 2C12 2 7 8 7 13a5 5 0 0010 0c0-5-5-11-5-11z" />
-      </svg>
-    );
-  return (
-    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-    </svg>
-  );
+  return <IconeCapteur type={type} />;
 }
 
 const niveauStyle = {

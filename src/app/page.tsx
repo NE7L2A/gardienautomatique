@@ -6,7 +6,7 @@ import Header from "@/components/ui/Header";
 import Navigation from "@/components/ui/Navigation";
 import Semaphore from "@/components/dashboard/Semaphore";
 import CarteCapteur from "@/components/dashboard/CarteCapteur";
-import { alertesRecentes, libelleTypeCapteur } from "@/lib/mock-data";
+import { libelleTypeCapteur } from "@/lib/mock-data";
 import { supprimerDispositif } from "@/lib/store";
 import {
   construireDispositifs,
@@ -130,7 +130,9 @@ function construireHistorique(
     }));
   if (gaz.length > 0) result.gaz = gaz;
 
-  result.presence = construireBlocsPresence(lectures6);
+  if (lectures6.some((l) => l.presence)) {
+    result.presence = construireBlocsPresence(lectures6);
+  }
   return result;
 }
 
@@ -199,16 +201,34 @@ function cleVerrou(baseId: string, type: string): string {
   return `${baseId}:${type}`;
 }
 
-function traiterFranchissements(dispositifs: Dispositif[]): void {
+function traiterFranchissements(
+  dispositifs: Dispositif[],
+  config: ConfigAlertes
+): void {
+  const tempMax = config.temp_max ?? 28;
+  const humMax = config.hum_max ?? 80;
+  const gazMax = config.gaz_max ?? 60;
   for (const d of dispositifs) {
     for (const c of d.capteurs) {
       const cle = cleVerrou(d.baseId, c.type);
       if (c.etat === "danger") {
         if (verrousAlerte.has(cle)) continue;
         verrousAlerte.add(cle);
+        let message = "";
+        if (c.type === "temperature") {
+          message = `Température de ${d.nom} a atteint ${c.valeur}${c.unite} (seuil : ${tempMax}${c.unite})`;
+        } else if (c.type === "humidite") {
+          message = `Taux d'humidité de ${d.nom} a atteint ${c.valeur}${c.unite} (seuil : ${humMax}${c.unite})`;
+        } else if (c.type === "gaz") {
+          message = `Taux de gaz de ${d.nom} a atteint ${c.valeur}${c.unite} (seuil : ${gazMax}${c.unite})`;
+        } else if (c.type === "presence") {
+          message = `Mouvement détecté dans ${d.nom}`;
+        } else {
+          message = `${c.nom} : ${c.valeur}${c.unite}`;
+        }
         envoyerEmail({
           titre: `ALERTE ${d.nom} — ${libelleTypeCapteur[c.type] ?? c.type}`,
-          message: `${c.nom} : ${c.valeur}${c.unite} — seuil critique dépassé (${d.nom}).`,
+          message,
         });
       } else if (c.etat === "normal") {
         verrousAlerte.delete(cle);
@@ -358,6 +378,14 @@ function formaterDateReception(timestamp: string): string {
   });
 }
 
+function MessageAucuneDonnee({ texte }: { texte: string }) {
+  return (
+    <div className="bg-[#243447] rounded-xl p-4 border border-[#334155] flex items-center justify-center min-h-[7rem]">
+      <p className="text-[#64748B] text-sm text-center">{texte}</p>
+    </div>
+  );
+}
+
 export default function DashboardPage() {
   const dispositifs = useSyncExternalStore(
     souscrire,
@@ -387,7 +415,7 @@ export default function DashboardPage() {
     setHorsLigne(false);
     const appliques = appliquerLectures(lireSnapshot(), lectures, config ?? {});
     publier(appliques);
-    traiterFranchissements(appliques);
+    traiterFranchissements(appliques, config ?? {});
     let derniere = "";
     for (const lecture of lectures) {
       if (!derniere || lecture.timestamp > derniere) derniere = lecture.timestamp;
@@ -519,22 +547,6 @@ export default function DashboardPage() {
           />
         </div>
 
-        {alertesRecentes.filter((a) => !a.lue).length > 0 && (
-          <div className="bg-[#FF9900]/8 border border-[#FF9900]/20 rounded-xl p-3">
-            <p className="text-[#FF9900] text-xs font-semibold mb-1 uppercase tracking-wider">
-              Alertes récentes
-            </p>
-            {alertesRecentes
-              .filter((a) => !a.lue)
-              .slice(0, 2)
-              .map((alerte) => (
-                <p key={alerte.id} className="text-white text-sm">
-                  {alerte.message}
-                </p>
-              ))}
-          </div>
-        )}
-
         {dispositifsVisibles.map((dispositif) => {
           const hist = historiques[dispositif.baseId];
           const idBD = getDeviceIdBd(dispositif.baseId);
@@ -597,7 +609,7 @@ export default function DashboardPage() {
                 </div>
               )}
 
-              {hist?.temperature && (
+              {hist?.temperature ? (
                 <Graphique
                   titre="Température — 24h"
                   sousTitre={`Évolution ${dispositif.nom}`}
@@ -606,9 +618,11 @@ export default function DashboardPage() {
                   couleur="#FF9900"
                   domaine={["dataMin - 2", "dataMax + 2"]}
                 />
+              ) : (
+                <MessageAucuneDonnee texte="Aucune donnée reçue sur les dernières 24 heures" />
               )}
 
-              {hist?.humidite && (
+              {hist?.humidite ? (
                 <Graphique
                   titre="Humidité — 24h"
                   sousTitre={`Taux d'humidité ${dispositif.nom}`}
@@ -618,9 +632,11 @@ export default function DashboardPage() {
                   domaine={[0, 100]}
                   formatter={formatterPourcent}
                 />
+              ) : (
+                <MessageAucuneDonnee texte="Aucune donnée reçue sur les dernières 24 heures" />
               )}
 
-              {hist?.gaz && (
+              {hist?.gaz ? (
                 <Graphique
                   titre="Gaz — 24h"
                   sousTitre={`Concentration (%) ${dispositif.nom}`}
@@ -630,13 +646,17 @@ export default function DashboardPage() {
                   domaine={[0, "dataMax + 20"]}
                   formatter={formatterPourcent}
                 />
+              ) : (
+                <MessageAucuneDonnee texte="Aucune donnée reçue sur les dernières 24 heures" />
               )}
 
-              {hist?.presence && (
+              {hist?.presence ? (
                 <BlocsPresence
                   donnees={hist.presence}
                   nomDispositif={dispositif.nom}
                 />
+              ) : (
+                <MessageAucuneDonnee texte="Aucune donnée reçue sur les dernières 6 heures" />
               )}
             </section>
           );
