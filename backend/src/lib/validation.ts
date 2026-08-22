@@ -2,7 +2,6 @@ export type Presence = "OUI" | "NON";
 
 export interface SaisieMesure {
   device_id: string;
-  nom?: string;
   temperature?: number;
   humidite?: number;
   gaz_pourcent?: number;
@@ -30,18 +29,6 @@ export function validerMesure(corps: unknown): ResultatValidation<SaisieMesure> 
   const deviceId = brut.device_id.trim();
   if (deviceId.length > 50) {
     return { ok: false, erreur: "device_id ne doit pas dépasser 50 caractères." };
-  }
-
-  let nom: string | undefined;
-  if (brut.nom !== undefined && brut.nom !== null) {
-    if (typeof brut.nom !== "string") {
-      return { ok: false, erreur: "nom doit être une chaîne de caractères." };
-    }
-    const nomNet = brut.nom.trim();
-    if (nomNet.length > 50) {
-      return { ok: false, erreur: "nom ne doit pas dépasser 50 caractères." };
-    }
-    nom = nomNet;
   }
 
   let temperature: number | undefined;
@@ -97,7 +84,6 @@ export function validerMesure(corps: unknown): ResultatValidation<SaisieMesure> 
     ok: true,
     donnees: {
       device_id: deviceId,
-      nom,
       temperature,
       humidite,
       gaz_pourcent: gazPourcent,

@@ -1,26 +1,20 @@
 "use client";
 
-import { useState, useEffect, useSyncExternalStore } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import Header from "@/components/ui/Header";
 import Navigation from "@/components/ui/Navigation";
 import Semaphore from "@/components/dashboard/Semaphore";
 import CarteCapteur from "@/components/dashboard/CarteCapteur";
 import { libelleTypeCapteur } from "@/lib/mock-data";
-import { supprimerDispositif } from "@/lib/store";
-import {
-  construireDispositifs,
-  grouperDispositifs,
-  capteursDisponibles,
-  getDeviceIdBd,
-  type Dispositif,
-} from "@/lib/dispositifs";
+import { chargerDispositifsApi, type Dispositif } from "@/lib/dispositifs";
 import {
   obtenirCapteurs,
   obtenirMesures,
   obtenirConfigAlertes,
   envoyerEmail,
   estPresenceActive,
+  supprimerDispositifApi,
 } from "@/lib/api";
 import type {
   EtatCapteur,
@@ -151,8 +145,7 @@ function appliquerLectures(
   const gazMax = config.gaz_max ?? 60;
 
   return dispositifs.map((dispositif) => {
-    const idBD = getDeviceIdBd(dispositif.baseId);
-    const lecture = idBD ? parDevice.get(idBD) : undefined;
+    const lecture = parDevice.get(dispositif.dev_eui);
     if (!lecture) return dispositif;
 
     return {
@@ -197,8 +190,8 @@ function appliquerLectures(
 
 const verrousAlerte = new Set<string>();
 
-function cleVerrou(baseId: string, type: string): string {
-  return `${baseId}:${type}`;
+function cleVerrou(devEui: string, type: string): string {
+  return `${devEui}:${type}`;
 }
 
 function traiterFranchissements(
@@ -210,7 +203,7 @@ function traiterFranchissements(
   const gazMax = config.gaz_max ?? 60;
   for (const d of dispositifs) {
     for (const c of d.capteurs) {
-      const cle = cleVerrou(d.baseId, c.type);
+      const cle = cleVerrou(d.dev_eui, c.type);
       if (c.etat === "danger") {
         if (verrousAlerte.has(cle)) continue;
         verrousAlerte.add(cle);
@@ -235,39 +228,6 @@ function traiterFranchissements(
       }
     }
   }
-}
-
-type Ecouteur = () => void;
-
-let snapshot: Dispositif[] | null = null;
-let snapshotServeur: Dispositif[] | null = null;
-const ecouteurs = new Set<Ecouteur>();
-
-function lireSnapshot(): Dispositif[] {
-  if (snapshot === null) snapshot = construireDispositifs();
-  return snapshot;
-}
-
-function lireSnapshotServeur(): Dispositif[] {
-  if (snapshotServeur === null)
-    snapshotServeur = grouperDispositifs(capteursDisponibles(), []);
-  return snapshotServeur;
-}
-
-function publier(nouveau: Dispositif[]): void {
-  snapshot = nouveau;
-  ecouteurs.forEach((fn) => fn());
-}
-
-function actualiserDepuisStockage(): void {
-  publier(construireDispositifs());
-}
-
-function souscrire(onChange: Ecouteur): () => void {
-  ecouteurs.add(onChange);
-  return () => {
-    ecouteurs.delete(onChange);
-  };
 }
 
 interface GraphiqueProps {
@@ -378,20 +338,32 @@ function formaterDateReception(timestamp: string): string {
   });
 }
 
-function MessageAucuneDonnee({ texte }: { texte: string }) {
+function MessageAucuneDonnee({
+  texte,
+  titre,
+  sousTitre,
+}: {
+  texte: string;
+  titre?: string;
+  sousTitre?: string;
+}) {
   return (
-    <div className="bg-[#243447] rounded-xl p-4 border border-[#334155] flex items-center justify-center min-h-[7rem]">
-      <p className="text-[#64748B] text-sm text-center">{texte}</p>
+    <div className="bg-[#243447] rounded-xl p-4 border border-[#334155]">
+      {titre && (
+        <h3 className="text-white font-bold text-sm mb-1">{titre}</h3>
+      )}
+      {sousTitre && (
+        <p className="text-[#64748B] text-xs mb-3">{sousTitre}</p>
+      )}
+      <div className="flex items-center justify-center min-h-[5rem]">
+        <p className="text-[#64748B] text-sm text-center">{texte}</p>
+      </div>
     </div>
   );
 }
 
 export default function DashboardPage() {
-  const dispositifs = useSyncExternalStore(
-    souscrire,
-    lireSnapshot,
-    lireSnapshotServeur
-  );
+  const [dispositifs, setDispositifs] = useState<Dispositif[]>([]);
   const [selection, setSelection] = useState<string>("tous");
   const [horsLigne, setHorsLigne] = useState(false);
   const [derniereReception, setDerniereReception] = useState<string | null>(null);
@@ -399,9 +371,12 @@ export default function DashboardPage() {
     Record<string, HistoriqueDispositif>
   >({});
 
-  const cleDispositifs = dispositifs
-    .map((d) => `${d.baseId}:${getDeviceIdBd(d.baseId) ?? ""}`)
-    .join("|");
+  async function chargerDispositifs() {
+    const liste = await chargerDispositifsApi();
+    setDispositifs(liste);
+  }
+
+  const cleDispositifs = dispositifs.map((d) => d.dev_eui).join("|");
 
   async function rafraichirValeurs() {
     const [lectures, config] = await Promise.all([
@@ -413,9 +388,12 @@ export default function DashboardPage() {
       return;
     }
     setHorsLigne(false);
-    const appliques = appliquerLectures(lireSnapshot(), lectures, config ?? {});
-    publier(appliques);
-    traiterFranchissements(appliques, config ?? {});
+    const configVal = config ?? {};
+    setDispositifs((prev) => {
+      const misAJour = appliquerLectures(prev, lectures, configVal);
+      traiterFranchissements(misAJour, configVal);
+      return misAJour;
+    });
     let derniere = "";
     for (const lecture of lectures) {
       if (!derniere || lecture.timestamp > derniere) derniere = lecture.timestamp;
@@ -424,35 +402,33 @@ export default function DashboardPage() {
   }
 
   async function rafraichirHistorique() {
-    const courants = lireSnapshot();
+    const courants = dispositifs;
     const maintenant = new Date().toISOString();
     const debut24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
     const debut6h = new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString();
     const result: Record<string, HistoriqueDispositif> = {};
     for (const d of courants) {
-      const idBD = getDeviceIdBd(d.baseId);
-      if (!idBD) continue;
       const [r24, r6] = await Promise.all([
         obtenirMesures({
-          device_id: idBD,
+          device_id: d.dev_eui,
           from: debut24h,
           to: maintenant,
           limit: 2000,
         }),
         obtenirMesures({
-          device_id: idBD,
+          device_id: d.dev_eui,
           from: debut6h,
           to: maintenant,
           limit: 2000,
         }),
       ]);
-      if (r24) result[d.baseId] = construireHistorique(r24, r6 ?? []);
+      if (r24) result[d.dev_eui] = construireHistorique(r24, r6 ?? []);
     }
     setHistoriques(result);
   }
 
   useEffect(() => {
-    actualiserDepuisStockage();
+    chargerDispositifs();
     setTimeout(rafraichirValeurs, 0);
     setTimeout(rafraichirHistorique, 0);
     const intervalValeurs = setInterval(rafraichirValeurs, 5000);
@@ -470,7 +446,7 @@ export default function DashboardPage() {
   const dispositifsVisibles =
     selection === "tous"
       ? dispositifs
-      : dispositifs.filter((d) => d.baseId === selection);
+      : dispositifs.filter((d) => d.dev_eui === selection);
 
   const capteursVisibles = dispositifsVisibles.flatMap((d) => d.capteurs);
 
@@ -482,16 +458,16 @@ export default function DashboardPage() {
     ? "alerte"
     : "normal";
 
-  const gererSuppression = (dispositif: Dispositif) => {
+  const gererSuppression = async (dispositif: Dispositif) => {
     if (
       !window.confirm(
         `Supprimer le dispositif « ${dispositif.nom} » ? Toutes ses données seront retirées de la page.`
       )
     )
       return;
-    supprimerDispositif(dispositif.baseId);
-    actualiserDepuisStockage();
-    if (selection === dispositif.baseId) setSelection("tous");
+    await supprimerDispositifApi(dispositif.dev_eui);
+    await chargerDispositifs();
+    if (selection === dispositif.dev_eui) setSelection("tous");
   };
 
   return (
@@ -510,7 +486,7 @@ export default function DashboardPage() {
               Tous
             </option>
             {dispositifs.map((d) => (
-              <option key={d.baseId} value={d.baseId} className="bg-[#243447]">
+              <option key={d.dev_eui} value={d.dev_eui} className="bg-[#243447]">
                 {d.nom}
               </option>
             ))}
@@ -548,38 +524,26 @@ export default function DashboardPage() {
         </div>
 
         {dispositifsVisibles.map((dispositif) => {
-          const hist = historiques[dispositif.baseId];
-          const idBD = getDeviceIdBd(dispositif.baseId);
+          const hist = historiques[dispositif.dev_eui];
           return (
-            <section key={dispositif.baseId} className="space-y-5">
+            <section key={dispositif.dev_eui} className="space-y-5">
               <div className="flex items-center justify-between gap-3">
                 <div className="min-w-0">
                   <h2 className="text-white font-bold text-lg">
                     {dispositif.nom}
                   </h2>
                   <p className="text-[#64748B] text-xs">
-                    {dispositif.capteurs.length} mesure(s) en temps réel
-                    {idBD ? ` · ${idBD}` : ""}
+                    {dispositif.capteurs.length} capteurs · {dispositif.dev_eui}
                   </p>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   <Link
-                    href={`/modifier-dispositif?id=${dispositif.baseId}`}
+                    href={`/modifier-dispositif?dev_eui=${dispositif.dev_eui}`}
                     aria-label={`Modifier ${dispositif.nom}`}
                     className="w-9 h-9 rounded-xl flex items-center justify-center bg-[#2979FF]/10 border border-[#2979FF]/20 text-[#2979FF] transition-all duration-200 hover:scale-105 active:scale-95"
                   >
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                    </svg>
-                  </Link>
-                  <Link
-                    href={`/seuils-capteur?id=${dispositif.baseId}`}
-                    aria-label={`Seuils ${dispositif.nom}`}
-                    className="w-9 h-9 rounded-xl flex items-center justify-center bg-[#00C853]/10 border border-[#00C853]/20 text-[#00C853] transition-all duration-200 hover:scale-105 active:scale-95"
-                  >
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v3m0 12v3m9-9h-3M6 12H3m15.364-6.364l-2.12 2.12M7.757 16.243l-2.121 2.121m0-12.728l2.12 2.12m9.9 9.9l2.121 2.121" />
-                      <circle cx="12" cy="12" r="3.5" />
                     </svg>
                   </Link>
                   <button
@@ -600,15 +564,6 @@ export default function DashboardPage() {
                 ))}
               </div>
 
-              {!idBD && (
-                <div className="bg-[#243447] rounded-xl p-4 border border-[#334155]">
-                  <p className="text-[#94A3B8] text-xs">
-                    En attente de données — renseignez l&apos;ID de la base de
-                    données via « Modifier ».
-                  </p>
-                </div>
-              )}
-
               {hist?.temperature ? (
                 <Graphique
                   titre="Température — 24h"
@@ -619,7 +574,11 @@ export default function DashboardPage() {
                   domaine={["dataMin - 2", "dataMax + 2"]}
                 />
               ) : (
-                <MessageAucuneDonnee texte="Aucune donnée reçue sur les dernières 24 heures" />
+                <MessageAucuneDonnee
+                  titre="Température — 24h"
+                  sousTitre={`Évolution ${dispositif.nom}`}
+                  texte="Aucune donnée reçue sur les dernières 24 heures"
+                />
               )}
 
               {hist?.humidite ? (
@@ -633,7 +592,11 @@ export default function DashboardPage() {
                   formatter={formatterPourcent}
                 />
               ) : (
-                <MessageAucuneDonnee texte="Aucune donnée reçue sur les dernières 24 heures" />
+                <MessageAucuneDonnee
+                  titre="Humidité — 24h"
+                  sousTitre={`Taux d'humidité ${dispositif.nom}`}
+                  texte="Aucune donnée reçue sur les dernières 24 heures"
+                />
               )}
 
               {hist?.gaz ? (
@@ -647,7 +610,11 @@ export default function DashboardPage() {
                   formatter={formatterPourcent}
                 />
               ) : (
-                <MessageAucuneDonnee texte="Aucune donnée reçue sur les dernières 24 heures" />
+                <MessageAucuneDonnee
+                  titre="Gaz — 24h"
+                  sousTitre={`Concentration (%) ${dispositif.nom}`}
+                  texte="Aucune donnée reçue sur les dernières 24 heures"
+                />
               )}
 
               {hist?.presence ? (
@@ -656,7 +623,11 @@ export default function DashboardPage() {
                   nomDispositif={dispositif.nom}
                 />
               ) : (
-                <MessageAucuneDonnee texte="Aucune donnée reçue sur les dernières 6 heures" />
+                <MessageAucuneDonnee
+                  titre="Présence — 6h"
+                  sousTitre={dispositif.nom}
+                  texte="Aucune donnée reçue sur les dernières 6 heures"
+                />
               )}
             </section>
           );

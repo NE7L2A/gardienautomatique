@@ -25,6 +25,45 @@ async function requeteApi<T>(
   }
 }
 
+export interface DispositifData {
+  dev_eui: string;
+  device_name: string | null;
+  latitude: number | null;
+  longitude: number | null;
+}
+
+export function obtenirDispositifsApi(): Promise<DispositifData[] | null> {
+  return requeteApi<DispositifData[]>("/api/dispositifs");
+}
+
+export function creerDispositif(
+  dev_eui: string,
+  device_name: string
+): Promise<DispositifData | null> {
+  return requeteApi<DispositifData>("/api/dispositifs", {
+    method: "POST",
+    body: JSON.stringify({ dev_eui, device_name }),
+  });
+}
+
+export function modifierDispositifApi(
+  dev_eui: string,
+  device_name: string
+): Promise<DispositifData | null> {
+  return requeteApi<DispositifData>(`/api/dispositifs/${encodeURIComponent(dev_eui)}`, {
+    method: "PUT",
+    body: JSON.stringify({ device_name }),
+  });
+}
+
+export function supprimerDispositifApi(
+  dev_eui: string
+): Promise<{ statut: string } | null> {
+  return requeteApi<{ statut: string }>(`/api/dispositifs/${encodeURIComponent(dev_eui)}`, {
+    method: "DELETE",
+  });
+}
+
 export interface FiltresMesures {
   device_id?: string;
   from?: string;

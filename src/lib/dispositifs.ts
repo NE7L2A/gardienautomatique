@@ -1,69 +1,84 @@
-import { sallesDefaut, libelleTypeCapteur } from "./mock-data";
+import { libelleTypeCapteur } from "./mock-data";
 import {
-  getCapteursAjoutes,
-  getDispositifsSupprimes,
-  getDispositifInfos,
-  baseIdCapteur,
-} from "./store";
-import type { Capteur } from "@/types";
+  obtenirDispositifsApi,
+  obtenirCapteurs,
+  type DispositifData,
+} from "./api";
+import type { Capteur, Lecture } from "@/types";
 
 export interface Dispositif {
-  baseId: string;
+  dev_eui: string;
   nom: string;
   capteurs: Capteur[];
 }
 
-export function capteursDisponibles(): Capteur[] {
-  return [...sallesDefaut.flatMap((s) => s.capteurs), ...getCapteursAjoutes()];
-}
+function construireCapteursDepuisLecture(
+  dev_eui: string,
+  nom: string,
+  lecture: Lecture | undefined
+): Capteur[] {
+  const types: Array<{ type: Capteur["type"]; unite: string }> = [
+    { type: "temperature", unite: "°C" },
+    { type: "humidite", unite: "%" },
+    { type: "gaz", unite: "%" },
+    { type: "presence", unite: "" },
+  ];
 
-export function grouperDispositifs(
-  capteurs: Capteur[],
-  supprimes: string[]
-): Dispositif[] {
-  const groupes = new Map<string, Capteur[]>();
-  for (const capteur of capteurs) {
-    const baseId = baseIdCapteur(capteur.id);
-    if (supprimes.includes(baseId)) continue;
-    const liste = groupes.get(baseId);
-    if (liste) {
-      if (!liste.some((c) => c.id === capteur.id)) liste.push(capteur);
+  return types.map(({ type, unite }) => {
+    let valeur: number | string;
+    let etat: Capteur["etat"] = "normal";
+
+    if (type === "temperature" && lecture?.temperature !== null && lecture?.temperature !== undefined) {
+      valeur = lecture.temperature;
+    } else if (type === "humidite" && lecture?.humidite !== null && lecture?.humidite !== undefined) {
+      valeur = lecture.humidite;
+    } else if (type === "gaz" && lecture?.gaz_pourcent !== null && lecture?.gaz_pourcent !== undefined) {
+      valeur = lecture.gaz_pourcent;
+    } else if (type === "presence" && lecture?.presence) {
+      valeur = lecture.presence === "OUI" ? "Détecté" : "Sécurisé";
+      etat = lecture.presence === "OUI" ? "alerte" : "normal";
     } else {
-      groupes.set(baseId, [capteur]);
+      valeur = "—";
     }
-  }
-  return Array.from(groupes.entries()).map(([baseId, liste]) => {
-    const reference = liste.find((c) => c.id === baseId) ?? liste[0];
-    const infos = getDispositifInfos(baseId);
-    const override = infos?.nom.trim();
-    const nom = override || reference.nom.replace(/\s*—\s*.+$/, "").trim();
-    const capteurs = override
-      ? liste.map((c) => {
-          const libelle = libelleTypeCapteur[c.type];
-          return {
-            ...c,
-            nom: libelle ? `${override} — ${libelle}` : override,
-          };
-        })
-      : liste;
-    return { baseId, nom, capteurs };
+
+    const libelle = libelleTypeCapteur[type] ?? type;
+    return {
+      id: `${dev_eui}_${type}`,
+      nom: `${nom} — ${libelle}`,
+      type,
+      valeur,
+      unite,
+      etat,
+      salle: nom,
+      derniereMiseAJour: lecture?.timestamp ?? new Date().toISOString(),
+    };
   });
 }
 
-export function construireDispositifs(): Dispositif[] {
-  return grouperDispositifs(capteursDisponibles(), getDispositifsSupprimes());
-}
+export async function chargerDispositifsApi(): Promise<Dispositif[]> {
+  const [dispositifsData, lectures] = await Promise.all([
+    obtenirDispositifsApi(),
+    obtenirCapteurs(),
+  ]);
 
-export function getDispositifParId(baseId: string): Dispositif | null {
-  return construireDispositifs().find((d) => d.baseId === baseId) ?? null;
-}
+  if (!dispositifsData || dispositifsData.length === 0) return [];
 
-export const ID_BD_SALLE_TEST = "ESP32_001";
+  const lecturesParDevice = new Map<string, Lecture>();
+  if (lectures) {
+    for (const l of lectures) {
+      if (!lecturesParDevice.has(l.device_id)) {
+        lecturesParDevice.set(l.device_id, l);
+      }
+    }
+  }
 
-export function getDeviceIdBd(baseId: string): string | null {
-  const infos = getDispositifInfos(baseId);
-  const idBD = infos?.idBD?.trim();
-  if (idBD) return idBD;
-  if (baseId === "capteur_00") return ID_BD_SALLE_TEST;
-  return null;
+  return dispositifsData.map((d) => {
+    const lecture = lecturesParDevice.get(d.dev_eui);
+    const nom = d.device_name || d.dev_eui;
+    return {
+      dev_eui: d.dev_eui,
+      nom,
+      capteurs: construireCapteursDepuisLecture(d.dev_eui, nom, lecture),
+    };
+  });
 }

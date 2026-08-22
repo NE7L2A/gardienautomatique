@@ -3,20 +3,18 @@ import { requete, type LigneBd } from "@/lib/db";
 
 interface LigneLecture extends LigneBd {
   id: number;
-  device_id: string;
+  dev_eui: string;
   timestamp: string;
   temperature: string | null;
   humidite: string | null;
   gaz_pourcent: number | null;
   presence: string | null;
-  nom: string | null;
 }
 
 function convertir(l: LigneLecture) {
   return {
     id: l.id,
-    device_id: l.device_id,
-    nom: l.nom,
+    device_id: l.dev_eui,
     timestamp: l.timestamp,
     temperature: l.temperature === null ? null : Number(l.temperature),
     humidite: l.humidite === null ? null : Number(l.humidite),
@@ -28,9 +26,9 @@ function convertir(l: LigneLecture) {
 export async function GET() {
   try {
     const lignes = await requete<LigneLecture>(
-      `SELECT DISTINCT ON (device_id) *
+      `SELECT DISTINCT ON (dev_eui) dev_eui, timestamp, temperature, humidite, gaz_pourcent, presence
        FROM sensor_readings
-       ORDER BY device_id, timestamp DESC`
+       ORDER BY dev_eui, timestamp DESC`
     );
     return NextResponse.json(lignes.map(convertir));
   } catch {

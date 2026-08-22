@@ -7,7 +7,7 @@ import Header from "@/components/ui/Header";
 import Navigation from "@/components/ui/Navigation";
 import Carte from "@/components/ui/Carte";
 import Bouton from "@/components/ui/Bouton";
-import { validerEmail, validerTelephone } from "@/lib/validators";
+import { validerEmail } from "@/lib/validators";
 import { obtenirConfigAlertes, sauvegarderConfigAlertes } from "@/lib/api";
 import type { ThemeNom } from "@/types";
 
@@ -19,21 +19,20 @@ const THEMES: { valeur: ThemeNom; label: string; description: string; icone: str
 
 function lireProfil() {
   if (typeof window === "undefined")
-    return { email: "", telephone: "", nomDomicile: "", adresse: "", theme: "dark" as ThemeNom };
+    return { email: "", nomDomicile: "", adresse: "", theme: "dark" as ThemeNom };
   try {
     const str = localStorage.getItem("protecteur_utilisateur");
     if (str) {
       const u = JSON.parse(str);
       return {
         email: u.email || "",
-        telephone: u.telephone || "",
         nomDomicile: u.nomDomicile || "",
         adresse: u.adresse || "",
         theme: (u.theme || "dark") as ThemeNom,
       };
     }
   } catch {}
-  return { email: "", telephone: "", nomDomicile: "", adresse: "", theme: "dark" as ThemeNom };
+  return { email: "", nomDomicile: "", adresse: "", theme: "dark" as ThemeNom };
 }
 
 export default function ParametresPage() {
@@ -41,13 +40,11 @@ export default function ParametresPage() {
   const profilInit = useState(lireProfil)[0];
 
   const [email, setEmail] = useState(profilInit.email);
-  const [telephone, setTelephone] = useState(profilInit.telephone);
   const [nomDomicile, setNomDomicile] = useState(profilInit.nomDomicile);
   const [adresse, setAdresse] = useState(profilInit.adresse);
   const [theme, setTheme] = useState<ThemeNom>(profilInit.theme);
   const [message, setMessage] = useState("");
   const [emailErreur, setEmailErreur] = useState("");
-  const [telErreur, setTelErreur] = useState("");
 
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
@@ -58,14 +55,12 @@ export default function ParametresPage() {
     obtenirConfigAlertes().then((config) => {
       if (annule) return;
       if (config?.email) setEmail(config.email);
-      if (config?.sms) setTelephone(config.sms);
     });
     return () => { annule = true; };
   }, []);
 
   const sauvegarder = () => {
     setEmailErreur("");
-    setTelErreur("");
 
     if (email) {
       const errEmail = validerEmail(email);
@@ -74,26 +69,18 @@ export default function ParametresPage() {
         return;
       }
     }
-    if (telephone) {
-      const errTel = validerTelephone(telephone);
-      if (errTel) {
-        setTelErreur(errTel);
-        return;
-      }
-    }
     const utilisateurStr = localStorage.getItem("protecteur_utilisateur");
     let utilisateur = utilisateurStr ? JSON.parse(utilisateurStr) : {};
     utilisateur = {
       ...utilisateur,
       email,
-      telephone,
       nomDomicile,
       adresse,
       theme,
     };
     localStorage.setItem("protecteur_utilisateur", JSON.stringify(utilisateur));
     localStorage.setItem("protecteur_theme", JSON.stringify(theme));
-    sauvegarderConfigAlertes({ email, sms: telephone });
+    sauvegarderConfigAlertes({ email });
     setMessage("Profil sauvegardé");
     setTimeout(() => setMessage(""), 2500);
   };
@@ -164,24 +151,6 @@ export default function ParametresPage() {
                 />
                 {emailErreur && (
                   <p className="text-[#FF1744] text-xs mt-1">{emailErreur}</p>
-                )}
-              </div>
-              <div className="border-t border-[#334155] pt-4">
-                <label className="text-[#94A3B8] text-xs font-medium mb-1 block">
-                  Numéro de téléphone (SMS)
-                </label>
-                <input
-                  type="tel"
-                  value={telephone}
-                  onChange={(e) => {
-                    setTelephone(e.target.value);
-                    setTelErreur("");
-                  }}
-                  placeholder="+221 77 123 45 67"
-                  className="w-full bg-transparent text-white text-sm placeholder-[#64748B] focus:outline-none"
-                />
-                {telErreur && (
-                  <p className="text-[#FF1744] text-xs mt-1">{telErreur}</p>
                 )}
               </div>
             </div>

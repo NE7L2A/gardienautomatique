@@ -4,20 +4,18 @@ import { validerMesure } from "@/lib/validation";
 
 interface LigneLecture extends LigneBd {
   id: number;
-  device_id: string;
+  dev_eui: string;
   timestamp: string;
   temperature: string | null;
   humidite: string | null;
   gaz_pourcent: number | null;
   presence: string | null;
-  nom: string | null;
 }
 
 function convertir(l: LigneLecture) {
   return {
     id: l.id,
-    device_id: l.device_id,
-    nom: l.nom,
+    device_id: l.dev_eui,
     timestamp: l.timestamp,
     temperature: l.temperature === null ? null : Number(l.temperature),
     humidite: l.humidite === null ? null : Number(l.humidite),
@@ -42,12 +40,11 @@ export async function POST(req: NextRequest) {
   const m = valide.donnees;
   try {
     const lignes = await requete<LigneLecture>(
-      `INSERT INTO sensor_readings (device_id, nom, temperature, humidite, gaz_pourcent, presence)
-       VALUES ($1, $2, $3, $4, $5, $6)
+      `INSERT INTO sensor_readings (dev_eui, temperature, humidite, gaz_pourcent, presence)
+       VALUES ($1, $2, $3, $4, $5)
        RETURNING *`,
       [
         m.device_id,
-        m.nom ?? null,
         m.temperature ?? null,
         m.humidite ?? null,
         m.gaz_pourcent ?? null,
@@ -75,7 +72,7 @@ export async function GET(req: NextRequest) {
 
   if (deviceId) {
     parametres.push(deviceId);
-    conditions.push(`device_id = $${parametres.length}`);
+    conditions.push(`dev_eui = $${parametres.length}`);
   }
 
   if (from) {

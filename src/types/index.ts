@@ -38,7 +38,7 @@ export interface Capteur {
 }
 
 export interface ContactNotification {
-  telephone: string;
+  telephone?: string;
   email: string;
 }
 

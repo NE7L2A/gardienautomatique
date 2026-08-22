@@ -5,16 +5,8 @@ import { useRouter } from "next/navigation";
 import Header from "@/components/ui/Header";
 import Bouton from "@/components/ui/Bouton";
 import Carte from "@/components/ui/Carte";
-import {
-  getCapteursAjoutes,
-  sauvegarderCapteursAjoutes,
-  genererIdCapteur,
-  sauvegarderSeuilsCapteur,
-  sauvegarderContactNotification,
-  sauvegarderDispositifInfos,
-} from "@/lib/store";
-import { validerEmail, validerTelephone } from "@/lib/validators";
-import type { SeuilsCapteur } from "@/types";
+import { creerDispositif, sauvegarderConfigAlertes } from "@/lib/api";
+import { validerEmail } from "@/lib/validators";
 
 export default function AjouterCapteurPage() {
   const router = useRouter();
@@ -26,13 +18,11 @@ export default function AjouterCapteurPage() {
   const [humiditeMin, setHumiditeMin] = useState("20");
   const [humiditeMax, setHumiditeMax] = useState("80");
   const [gazMax, setGazMax] = useState("60");
-  const [presenceActive, setPresenceActive] = useState(true);
   const [email, setEmail] = useState("");
-  const [sms, setSms] = useState("");
   const [erreur, setErreur] = useState("");
   const [succes, setSucces] = useState(false);
 
-  const gererSoumission = () => {
+  const gererSoumission = async () => {
     setErreur("");
 
     if (
@@ -43,86 +33,32 @@ export default function AjouterCapteurPage() {
       !humiditeMin.trim() ||
       !humiditeMax.trim() ||
       !gazMax.trim() ||
-      !email.trim() ||
-      !sms.trim()
+      !email.trim()
     ) {
       setErreur("Veuillez remplir tous les champs.");
       return;
     }
     const errEmail = validerEmail(email);
     if (errEmail) { setErreur(errEmail); return; }
-    const errTel = validerTelephone(sms);
-    if (errTel) { setErreur(errTel); return; }
 
-    const capteurId = genererIdCapteur();
+    const dispositif = await creerDispositif(idBD.trim(), nom.trim());
+    if (!dispositif) {
+      setErreur("Impossible de créer le dispositif. Vérifiez la connexion au serveur.");
+      return;
+    }
 
-    const capteurs = [
-      {
-        id: capteurId,
-        nom: `${nom} — Température`,
-        type: "temperature" as const,
-        valeur: 22.0,
-        unite: "°C",
-        etat: "normal" as const,
-        salle: "Salle Test",
-        derniereMiseAJour: new Date().toISOString(),
-      },
-      {
-        id: `${capteurId}_hum`,
-        nom: `${nom} — Humidité`,
-        type: "humidite" as const,
-        valeur: 50,
-        unite: "%",
-        etat: "normal" as const,
-        salle: "Salle Test",
-        derniereMiseAJour: new Date().toISOString(),
-      },
-      {
-        id: `${capteurId}_gaz`,
-        nom: `${nom} — Gaz`,
-        type: "gaz" as const,
-        valeur: 30,
-        unite: "%",
-        etat: "normal" as const,
-        salle: "Salle Test",
-        derniereMiseAJour: new Date().toISOString(),
-      },
-      {
-        id: `${capteurId}_pres`,
-        nom: `${nom} — Présence`,
-        type: "presence" as const,
-        valeur: "Sécurisé",
-        unite: "",
-        etat: "normal" as const,
-        salle: "Salle Test",
-        derniereMiseAJour: new Date().toISOString(),
-      },
-    ];
-
-    const existants = getCapteursAjoutes();
-    sauvegarderCapteursAjoutes([...existants, ...capteurs]);
-
-    sauvegarderDispositifInfos(capteurId, {
-      idBD: idBD.trim(),
-      nom: nom.trim(),
-    });
-
-    const seuils: SeuilsCapteur = {
-      capteurId,
-      temperatureMin: parseFloat(temperatureMin) || undefined,
-      temperatureMax: parseFloat(temperatureMax) || undefined,
-      humiditeMin: parseFloat(humiditeMin) || undefined,
-      humiditeMax: parseFloat(humiditeMax) || undefined,
-      gazMax: parseFloat(gazMax) || undefined,
-      presenceActive,
-      flammeActive: true,
-    };
-    sauvegarderSeuilsCapteur(seuils);
-
-    sauvegarderContactNotification({
-      telephone: sms,
+    const config = await sauvegarderConfigAlertes({
       email,
+      temp_min: parseFloat(temperatureMin),
+      temp_max: parseFloat(temperatureMax),
+      hum_min: parseFloat(humiditeMin),
+      hum_max: parseFloat(humiditeMax),
+      gaz_max: parseFloat(gazMax),
     });
+    if (!config) {
+      setErreur("Impossible d'enregistrer la configuration des alertes. Vérifiez la connexion au serveur.");
+      return;
+    }
 
     setSucces(true);
     setTimeout(() => router.push("/"), 1500);
@@ -145,13 +81,13 @@ export default function AjouterCapteurPage() {
           </div>
         ) : (
           <>
-            {/* ID BD */}
+            {/* Dev EUI */}
             <section>
               <h2 className="text-white font-bold text-base mb-3">Identité du dispositif</h2>
               <div className="space-y-3">
                 <Carte>
                   <label className="text-[#94A3B8] text-xs font-medium mb-1 block">
-                    ID dans la base de données
+                    Dev EUI
                   </label>
                   <input
                     type="text"
@@ -208,12 +144,6 @@ export default function AjouterCapteurPage() {
                   <label className="text-[#94A3B8] text-xs font-medium mb-1 block">Gaz max (%)</label>
                   <input type="number" value={gazMax} onChange={(e) => setGazMax(e.target.value)} className="w-full bg-[#243447] text-white rounded-lg px-3 py-2 border border-[#334155] focus:outline-none focus:border-[#FF9900]" />
                 </Carte>
-                <Carte>
-                  <label className="flex items-center gap-3 cursor-pointer">
-                    <input type="checkbox" checked={presenceActive} onChange={(e) => setPresenceActive(e.target.checked)} className="w-4 h-4 accent-[#FF9900]" />
-                    <span className="text-white text-sm">Détection de présence active</span>
-                  </label>
-                </Carte>
               </div>
             </section>
 
@@ -230,18 +160,6 @@ export default function AjouterCapteurPage() {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="exemple@email.com"
-                    className="w-full bg-transparent text-white placeholder-[#64748B] focus:outline-none"
-                  />
-                </Carte>
-                <Carte>
-                  <label className="text-[#94A3B8] text-xs font-medium mb-1 block">
-                    Numéro SMS
-                  </label>
-                  <input
-                    type="tel"
-                    value={sms}
-                    onChange={(e) => setSms(e.target.value)}
-                    placeholder="+221 77 123 45 67"
                     className="w-full bg-transparent text-white placeholder-[#64748B] focus:outline-none"
                   />
                 </Carte>
