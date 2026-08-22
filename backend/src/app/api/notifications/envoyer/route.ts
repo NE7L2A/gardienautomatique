@@ -10,6 +10,7 @@ interface CorpsEnvoi {
   email?: string;
   titre?: string;
   message?: string;
+  attachment?: string;
 }
 
 function validerCorps(corps: unknown): CorpsEnvoi | null {
@@ -29,6 +30,10 @@ function validerCorps(corps: unknown): CorpsEnvoi | null {
   if (brut.message !== undefined) {
     if (typeof brut.message !== "string") return null;
     sortie.message = brut.message.trim();
+  }
+  if (brut.attachment !== undefined) {
+    if (typeof brut.attachment !== "string") return null;
+    sortie.attachment = brut.attachment;
   }
   return sortie;
 }
@@ -112,6 +117,11 @@ export async function POST(req: NextRequest) {
         <p style="font-size:14px">${message}</p>
         <p style="font-size:12px;color:#64748b">Envoyé automatiquement par le système de surveillance EYESHOME.</p>
       </div>`,
+      attachments: valide.attachment ? [{
+        filename: "rapport-eyeshome.pdf",
+        content: Buffer.from(valide.attachment, "base64"),
+        contentType: "application/pdf",
+      }] : [],
     });
 
     return NextResponse.json({ statut: "envoye", destinataire });

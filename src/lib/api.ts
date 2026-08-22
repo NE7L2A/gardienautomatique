@@ -108,6 +108,7 @@ export interface CorpsEnvoiEmail {
   email?: string;
   titre?: string;
   message?: string;
+  attachment?: string;
 }
 
 export function envoyerEmail(

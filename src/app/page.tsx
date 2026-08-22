@@ -16,6 +16,7 @@ import {
   estPresenceActive,
   supprimerDispositifApi,
 } from "@/lib/api";
+import { useRapportQuotidien } from "@/lib/use-rapport-quotidien";
 import type {
   EtatCapteur,
   Lecture,
@@ -370,6 +371,8 @@ export default function DashboardPage() {
   const [historiques, setHistoriques] = useState<
     Record<string, HistoriqueDispositif>
   >({});
+
+  useRapportQuotidien();
 
   async function chargerDispositifs() {
     const liste = await chargerDispositifsApi();

@@ -4,8 +4,11 @@ import { useState } from "react";
 import Header from "@/components/ui/Header";
 import Navigation from "@/components/ui/Navigation";
 import Carte from "@/components/ui/Carte";
+import Bouton from "@/components/ui/Bouton";
 import IconeCapteur from "@/components/ui/IconeCapteur";
 import { historiqueEvenements } from "@/lib/mock-data";
+import { useRapportQuotidien } from "@/lib/use-rapport-quotidien";
+import { genererPDF } from "@/lib/rapport";
 import type { TypeCapteur } from "@/types";
 
 const filtresType: { valeur: TypeCapteur | "tous"; label: string }[] = [
@@ -19,17 +22,39 @@ const filtresType: { valeur: TypeCapteur | "tous"; label: string }[] = [
 
 export default function HistoriquePage() {
   const [filtreType, setFiltreType] = useState<TypeCapteur | "tous">("tous");
+  const { stats, generer } = useRapportQuotidien();
 
   const evenementsFiltres = historiqueEvenements.filter((e) => {
     if (filtreType !== "tous" && e.type !== filtreType) return false;
     return true;
   });
 
+  const telechargerPDF = () => {
+    if (!stats) return;
+    const doc = genererPDF(stats);
+    const dateStr = stats.date.replace(/\s/g, "-");
+    doc.save(`rapport-eyeshome-${dateStr}.pdf`);
+  };
+
   return (
     <div className="min-h-screen bg-[#1A2332] pb-24">
       <Header titre="Historique" sousTitre="Tous les événements" />
 
       <main className="px-5 py-5 space-y-5">
+        <section id="rapport">
+          <h2 className="text-white font-bold text-base mb-3">Rapport du jour</h2>
+          {stats ? (
+            <Bouton onClick={telechargerPDF}>Télécharger PDF</Bouton>
+          ) : (
+            <button
+              onClick={generer}
+              className="text-[#FF9900] text-sm font-medium"
+            >
+              Générer maintenant
+            </button>
+          )}
+        </section>
+
         <section>
           <h3 className="text-[#64748B] text-xs font-medium mb-2 uppercase tracking-wider">
             Filtrer par type
