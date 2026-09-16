@@ -1,6 +1,5 @@
 import type {
   ParametresNotification,
-  ParametresSMS,
   Utilisateur,
   EtatApplication,
   ThemeNom,
@@ -12,14 +11,12 @@ import type {
 } from "@/types";
 import {
   parametresNotificationDefaut,
-  parametresSMSDefaut,
   parametresAlerteDefaut,
 } from "./mock-data";
 
 const CLES = {
   UTILISATEUR: "protecteur_utilisateur",
   NOTIFICATIONS: "protecteur_notifications",
-  SMS: "protecteur_sms",
   ETAT_APP: "protecteur_etat_app",
   THEME: "protecteur_theme",
   CAPTEURS_AJOUTES: "protecteur_capteurs_ajoutes",
@@ -51,16 +48,6 @@ export function sauvegarderParametresNotification(
   params: ParametresNotification
 ): void {
   localStorage.setItem(CLES.NOTIFICATIONS, JSON.stringify(params));
-}
-
-export function getParametresSMS(): ParametresSMS {
-  if (typeof window === "undefined") return parametresSMSDefaut;
-  const donnees = localStorage.getItem(CLES.SMS);
-  return donnees ? JSON.parse(donnees) : parametresSMSDefaut;
-}
-
-export function sauvegarderParametresSMS(params: ParametresSMS): void {
-  localStorage.setItem(CLES.SMS, JSON.stringify(params));
 }
 
 export function getEtatApplication(): EtatApplication {

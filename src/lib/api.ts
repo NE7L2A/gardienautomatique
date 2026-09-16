@@ -1,10 +1,10 @@
 import { API_BASE_URL } from "./config";
-import type { Lecture, PresenceValeur } from "@/types";
+import type { Lecture, PresenceValeur, ConfigAlertes } from "@/types";
 
-async function requeteApi(
+async function requeteApi<T>(
   chemin: string,
   options?: RequestInit
-): Promise<Lecture[] | null> {
+): Promise<T | null> {
   const controleur = new AbortController();
   const delai = setTimeout(() => controleur.abort(), 8000);
   try {
@@ -17,12 +17,51 @@ async function requeteApi(
       },
     });
     if (!reponse.ok) return null;
-    return (await reponse.json()) as Lecture[];
+    return (await reponse.json()) as T;
   } catch {
     return null;
   } finally {
     clearTimeout(delai);
   }
+}
+
+export interface DispositifData {
+  dev_eui: string;
+  device_name: string | null;
+  latitude: number | null;
+  longitude: number | null;
+}
+
+export function obtenirDispositifsApi(): Promise<DispositifData[] | null> {
+  return requeteApi<DispositifData[]>("/api/dispositifs");
+}
+
+export function creerDispositif(
+  dev_eui: string,
+  device_name: string
+): Promise<DispositifData | null> {
+  return requeteApi<DispositifData>("/api/dispositifs", {
+    method: "POST",
+    body: JSON.stringify({ dev_eui, device_name }),
+  });
+}
+
+export function modifierDispositifApi(
+  dev_eui: string,
+  device_name: string
+): Promise<DispositifData | null> {
+  return requeteApi<DispositifData>(`/api/dispositifs/${encodeURIComponent(dev_eui)}`, {
+    method: "PUT",
+    body: JSON.stringify({ device_name }),
+  });
+}
+
+export function supprimerDispositifApi(
+  dev_eui: string
+): Promise<{ statut: string } | null> {
+  return requeteApi<{ statut: string }>(`/api/dispositifs/${encodeURIComponent(dev_eui)}`, {
+    method: "DELETE",
+  });
 }
 
 export interface FiltresMesures {
@@ -43,13 +82,45 @@ function parametrer(filtres: FiltresMesures): string {
 }
 
 export function obtenirCapteurs(): Promise<Lecture[] | null> {
-  return requeteApi("/api/capteurs");
+  return requeteApi<Lecture[]>("/api/capteurs");
 }
 
 export function obtenirMesures(
   filtres: FiltresMesures = {}
 ): Promise<Lecture[] | null> {
-  return requeteApi(`/api/mesures${parametrer(filtres)}`);
+  return requeteApi<Lecture[]>(`/api/mesures${parametrer(filtres)}`);
+}
+
+export function obtenirConfigAlertes(): Promise<ConfigAlertes | null> {
+  return requeteApi<ConfigAlertes>("/api/alert-config");
+}
+
+export function sauvegarderConfigAlertes(
+  config: Partial<ConfigAlertes>
+): Promise<ConfigAlertes | null> {
+  return requeteApi<ConfigAlertes>("/api/alert-config", {
+    method: "PUT",
+    body: JSON.stringify(config),
+  });
+}
+
+export interface CorpsEnvoiEmail {
+  email?: string;
+  titre?: string;
+  message?: string;
+  attachment?: string;
+}
+
+export function envoyerEmail(
+  corps: CorpsEnvoiEmail
+): Promise<{ statut: string; destinataire?: string } | null> {
+  return requeteApi<{ statut: string; destinataire?: string }>(
+    "/api/notifications/envoyer",
+    {
+      method: "POST",
+      body: JSON.stringify(corps),
+    }
+  );
 }
 
 export function estPresenceActive(presence: PresenceValeur | null): boolean {

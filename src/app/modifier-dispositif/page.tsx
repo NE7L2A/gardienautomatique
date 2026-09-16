@@ -1,105 +1,81 @@
 "use client";
 
-import { useState, Suspense, useSyncExternalStore } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Header from "@/components/ui/Header";
 import Bouton from "@/components/ui/Bouton";
 import Carte from "@/components/ui/Carte";
-import { validerEmail, validerTelephone } from "@/lib/validators";
-import { getDispositifParId, getDeviceIdBd } from "@/lib/dispositifs";
+import { validerEmail } from "@/lib/validators";
 import {
-  getDispositifInfos,
-  sauvegarderDispositifInfos,
-  getSeuilsCapteur,
-  sauvegarderSeuilsCapteur,
-  getContactNotification,
-  sauvegarderContactNotification,
-} from "@/lib/store";
-
-function useMounted(): boolean {
-  return useSyncExternalStore(
-    () => () => {},
-    () => true,
-    () => false
-  );
-}
+  modifierDispositifApi,
+  sauvegarderConfigAlertes,
+  obtenirConfigAlertes,
+} from "@/lib/api";
 
 interface DonneesModification {
-  existe: boolean;
-  idBD: string;
   nom: string;
   temperatureMin: string;
   temperatureMax: string;
   humiditeMin: string;
   humiditeMax: string;
   gazMax: string;
-  presenceActive: boolean;
   email: string;
-  sms: string;
 }
 
 const donneesVides: DonneesModification = {
-  existe: false,
-  idBD: "",
   nom: "",
   temperatureMin: "18",
   temperatureMax: "28",
   humiditeMin: "20",
   humiditeMax: "80",
   gazMax: "60",
-  presenceActive: true,
   email: "",
-  sms: "",
 };
 
-function chargerDonnees(baseId: string): DonneesModification {
-  const dispositif = getDispositifParId(baseId);
-  if (!dispositif) return donneesVides;
-
-  const infos = getDispositifInfos(baseId);
-  const seuils = getSeuilsCapteur(baseId);
-  const contact = getContactNotification();
-
-  return {
-    existe: true,
-    idBD: infos?.idBD ?? getDeviceIdBd(baseId) ?? "",
-    nom: infos?.nom || dispositif.nom,
-    temperatureMin:
-      seuils?.temperatureMin !== undefined ? String(seuils.temperatureMin) : "18",
-    temperatureMax:
-      seuils?.temperatureMax !== undefined ? String(seuils.temperatureMax) : "28",
-    humiditeMin:
-      seuils?.humiditeMin !== undefined ? String(seuils.humiditeMin) : "20",
-    humiditeMax:
-      seuils?.humiditeMax !== undefined ? String(seuils.humiditeMax) : "80",
-    gazMax: seuils?.gazMax !== undefined ? String(seuils.gazMax) : "60",
-    presenceActive: seuils?.presenceActive ?? true,
-    email: contact.email,
-    sms: contact.telephone,
-  };
-}
-
-function Formulaire({ baseId }: { baseId: string }) {
+function Formulaire({ devEui }: { devEui: string }) {
   const router = useRouter();
 
-  const [donnees] = useState(() => chargerDonnees(baseId));
-  const [idBD, setIdBD] = useState(donnees.idBD);
-  const [nom, setNom] = useState(donnees.nom);
-  const [temperatureMin, setTemperatureMin] = useState(donnees.temperatureMin);
-  const [temperatureMax, setTemperatureMax] = useState(donnees.temperatureMax);
-  const [humiditeMin, setHumiditeMin] = useState(donnees.humiditeMin);
-  const [humiditeMax, setHumiditeMax] = useState(donnees.humiditeMax);
-  const [gazMax, setGazMax] = useState(donnees.gazMax);
-  const [presenceActive, setPresenceActive] = useState(donnees.presenceActive);
-  const [email, setEmail] = useState(donnees.email);
-  const [sms, setSms] = useState(donnees.sms);
+  const [chargement, setChargement] = useState(true);
+  const [donneesInit, setDonneesInit] = useState<DonneesModification>(donneesVides);
+  const [nom, setNom] = useState("");
+  const [temperatureMin, setTemperatureMin] = useState("18");
+  const [temperatureMax, setTemperatureMax] = useState("28");
+  const [humiditeMin, setHumiditeMin] = useState("20");
+  const [humiditeMax, setHumiditeMax] = useState("80");
+  const [gazMax, setGazMax] = useState("60");
+  const [email, setEmail] = useState("");
   const [erreur, setErreur] = useState("");
   const [succes, setSucces] = useState(false);
 
-  if (!donnees.existe) {
+  useEffect(() => {
+    async function charger() {
+      const config = await obtenirConfigAlertes();
+      const d: DonneesModification = {
+        nom: "",
+        temperatureMin: config?.temp_min !== undefined ? String(config.temp_min) : "18",
+        temperatureMax: config?.temp_max !== undefined ? String(config.temp_max) : "28",
+        humiditeMin: config?.hum_min !== undefined ? String(config.hum_min) : "20",
+        humiditeMax: config?.hum_max !== undefined ? String(config.hum_max) : "80",
+        gazMax: config?.gaz_max !== undefined ? String(config.gaz_max) : "60",
+        email: config?.email ?? "",
+      };
+      setDonneesInit(d);
+      setNom(d.nom);
+      setTemperatureMin(d.temperatureMin);
+      setTemperatureMax(d.temperatureMax);
+      setHumiditeMin(d.humiditeMin);
+      setHumiditeMax(d.humiditeMax);
+      setGazMax(d.gazMax);
+      setEmail(d.email);
+      setChargement(false);
+    }
+    charger();
+  }, []);
+
+  if (!devEui) {
     return (
       <div className="text-center space-y-4">
-        <p className="text-[#94A3B8] text-center">Dispositif introuvable</p>
+        <p className="text-[#94A3B8] text-center">Aucun dispositif sélectionné</p>
         <button
           onClick={() => router.push("/")}
           className="text-[#FF9900] text-sm font-medium"
@@ -110,13 +86,13 @@ function Formulaire({ baseId }: { baseId: string }) {
     );
   }
 
-  const gererSoumission = () => {
+  if (chargement) {
+    return <p className="text-[#94A3B8] text-center">Chargement...</p>;
+  }
+
+  const gererSoumission = async () => {
     setErreur("");
 
-    if (!idBD.trim()) {
-      setErreur("L'ID du dispositif (BD) est requis");
-      return;
-    }
     if (!nom.trim()) {
       setErreur("Donnez un nom à votre dispositif");
       return;
@@ -128,34 +104,25 @@ function Formulaire({ baseId }: { baseId: string }) {
         return;
       }
     }
-    if (sms) {
-      const errTel = validerTelephone(sms);
-      if (errTel) {
-        setErreur(errTel);
-        return;
-      }
+
+    const dispositif = await modifierDispositifApi(devEui, nom.trim());
+    if (!dispositif) {
+      setErreur("Impossible de modifier le dispositif. Vérifiez la connexion au serveur.");
+      return;
     }
 
-    const seuilsExistants = getSeuilsCapteur(baseId);
-
-    sauvegarderDispositifInfos(baseId, {
-      idBD: idBD.trim(),
-      nom: nom.trim(),
-    });
-    sauvegarderSeuilsCapteur({
-      capteurId: baseId,
-      temperatureMin: parseFloat(temperatureMin) || undefined,
-      temperatureMax: parseFloat(temperatureMax) || undefined,
-      humiditeMin: parseFloat(humiditeMin) || undefined,
-      humiditeMax: parseFloat(humiditeMax) || undefined,
-      gazMax: parseFloat(gazMax) || undefined,
-      presenceActive,
-      flammeActive: seuilsExistants?.flammeActive ?? true,
-    });
-    sauvegarderContactNotification({
-      telephone: sms,
+    const config = await sauvegarderConfigAlertes({
       email,
+      temp_min: parseFloat(temperatureMin) || undefined,
+      temp_max: parseFloat(temperatureMax) || undefined,
+      hum_min: parseFloat(humiditeMin) || undefined,
+      hum_max: parseFloat(humiditeMax) || undefined,
+      gaz_max: parseFloat(gazMax) || undefined,
     });
+    if (!config) {
+      setErreur("Impossible d'enregistrer la configuration des alertes.");
+      return;
+    }
 
     setSucces(true);
     setTimeout(() => router.push("/"), 1500);
@@ -180,15 +147,9 @@ function Formulaire({ baseId }: { baseId: string }) {
             <div className="space-y-3">
               <Carte>
                 <label className="text-[#94A3B8] text-xs font-medium mb-1 block">
-                  ID dans la base de données
+                  Dev EUI
                 </label>
-                <input
-                  type="text"
-                  value={idBD}
-                  onChange={(e) => setIdBD(e.target.value)}
-                  placeholder="Ex: ESP32_001"
-                  className="w-full bg-transparent text-white placeholder-[#64748B] focus:outline-none"
-                />
+                <p className="text-white text-sm">{devEui}</p>
               </Carte>
               <Carte>
                 <label className="text-[#94A3B8] text-xs font-medium mb-1 block">
@@ -236,12 +197,6 @@ function Formulaire({ baseId }: { baseId: string }) {
                 <label className="text-[#94A3B8] text-xs font-medium mb-1 block">Gaz max (%)</label>
                 <input type="number" value={gazMax} onChange={(e) => setGazMax(e.target.value)} className="w-full bg-[#243447] text-white rounded-lg px-3 py-2 border border-[#334155] focus:outline-none focus:border-[#FF9900]" />
               </Carte>
-              <Carte>
-                <label className="flex items-center gap-3 cursor-pointer">
-                  <input type="checkbox" checked={presenceActive} onChange={(e) => setPresenceActive(e.target.checked)} className="w-4 h-4 accent-[#FF9900]" />
-                  <span className="text-white text-sm">Détection de présence active</span>
-                </label>
-              </Carte>
             </div>
           </section>
 
@@ -257,18 +212,6 @@ function Formulaire({ baseId }: { baseId: string }) {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="exemple@email.com"
-                  className="w-full bg-transparent text-white placeholder-[#64748B] focus:outline-none"
-                />
-              </Carte>
-              <Carte>
-                <label className="text-[#94A3B8] text-xs font-medium mb-1 block">
-                  Numéro SMS
-                </label>
-                <input
-                  type="tel"
-                  value={sms}
-                  onChange={(e) => setSms(e.target.value)}
-                  placeholder="+221 77 123 45 67"
                   className="w-full bg-transparent text-white placeholder-[#64748B] focus:outline-none"
                 />
               </Carte>
@@ -299,15 +242,19 @@ function Formulaire({ baseId }: { baseId: string }) {
 }
 
 function ModifierDispositifForm() {
-  const monté = useMounted();
+  const [monte, setMonte] = useState(false);
   const searchParams = useSearchParams();
-  const baseId = searchParams.get("id") || "";
+  const devEui = searchParams.get("dev_eui") || "";
 
-  if (!monté) {
+  useEffect(() => {
+    setMonte(true);
+  }, []);
+
+  if (!monte) {
     return <p className="text-[#94A3B8] text-center">Chargement...</p>;
   }
 
-  return <Formulaire baseId={baseId} />;
+  return <Formulaire devEui={devEui} />;
 }
 
 export default function ModifierDispositifPage() {

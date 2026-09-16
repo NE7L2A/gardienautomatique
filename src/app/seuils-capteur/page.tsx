@@ -1,150 +1,152 @@
 "use client";
 
-import { useState, Suspense } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import Header from "@/components/ui/Header";
 import Bouton from "@/components/ui/Bouton";
 import Carte from "@/components/ui/Carte";
-import { getCapteursAjoutes, getSeuilsCapteur, sauvegarderSeuilsCapteur } from "@/lib/store";
-import type { SeuilsCapteur, TypeCapteur } from "@/types";
+import {
+  obtenirConfigAlertes,
+  sauvegarderConfigAlertes,
+} from "@/lib/api";
 
-function SeuilsForm() {
+export default function SeuilsCapteurPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const id = searchParams.get("id") || "";
-  const capteurTrouve = getCapteursAjoutes().find((c) => c.id === id);
-  const seuilsExistants = getSeuilsCapteur(id);
-
-  const type: TypeCapteur = capteurTrouve?.type ?? "temperature";
+  const [chargement, setChargement] = useState(true);
   const [succes, setSucces] = useState(false);
+  const [erreur, setErreur] = useState("");
 
-  const [temperatureMin, setTemperatureMin] = useState(String(seuilsExistants?.temperatureMin ?? 18));
-  const [temperatureMax, setTemperatureMax] = useState(String(seuilsExistants?.temperatureMax ?? 28));
-  const [humiditeMin, setHumiditeMin] = useState(String(seuilsExistants?.humiditeMin ?? 20));
-  const [humiditeMax, setHumiditeMax] = useState(String(seuilsExistants?.humiditeMax ?? 80));
-  const [gazMax, setGazMax] = useState(String(seuilsExistants?.gazMax ?? 60));
-  const [presenceActive, setPresenceActive] = useState(seuilsExistants?.presenceActive ?? true);
-  const [flammeActive, setFlammeActive] = useState(seuilsExistants?.flammeActive ?? true);
+  const [temperatureMin, setTemperatureMin] = useState("18");
+  const [temperatureMax, setTemperatureMax] = useState("28");
+  const [humiditeMin, setHumiditeMin] = useState("20");
+  const [humiditeMax, setHumiditeMax] = useState("80");
+  const [gazMax, setGazMax] = useState("60");
 
-  const sauvegarder = () => {
-    const seuils: SeuilsCapteur = {
-      capteurId: id,
-      temperatureMin: parseFloat(temperatureMin) || undefined,
-      temperatureMax: parseFloat(temperatureMax) || undefined,
-      humiditeMin: parseFloat(humiditeMin) || undefined,
-      humiditeMax: parseFloat(humiditeMax) || undefined,
-      gazMax: parseFloat(gazMax) || undefined,
-      presenceActive,
-      flammeActive,
+  useEffect(() => {
+    let annule = false;
+    obtenirConfigAlertes().then((config) => {
+      if (annule) return;
+      if (config) {
+        if (config.temp_min !== null && config.temp_min !== undefined) {
+          setTemperatureMin(String(config.temp_min));
+        }
+        if (config.temp_max !== null && config.temp_max !== undefined) {
+          setTemperatureMax(String(config.temp_max));
+        }
+        if (config.hum_min !== null && config.hum_min !== undefined) {
+          setHumiditeMin(String(config.hum_min));
+        }
+        if (config.hum_max !== null && config.hum_max !== undefined) {
+          setHumiditeMax(String(config.hum_max));
+        }
+        if (config.gaz_max !== null && config.gaz_max !== undefined) {
+          setGazMax(String(config.gaz_max));
+        }
+      }
+      setChargement(false);
+    });
+    return () => { annule = true; };
+  }, []);
+
+  const sauvegarder = async () => {
+    setErreur("");
+    const config = {
+      temp_min: parseFloat(temperatureMin) || undefined,
+      temp_max: parseFloat(temperatureMax) || undefined,
+      hum_min: parseFloat(humiditeMin) || undefined,
+      hum_max: parseFloat(humiditeMax) || undefined,
+      gaz_max: Math.round(parseFloat(gazMax) || 0) || undefined,
     };
-    sauvegarderSeuilsCapteur(seuils);
+    const resultat = await sauvegarderConfigAlertes(config);
+    if (!resultat) {
+      setErreur("Impossible d'enregistrer les seuils (backend injoignable).");
+      return;
+    }
     setSucces(true);
     setTimeout(() => router.push("/"), 1500);
   };
 
-  const aTemperature = type === "temperature";
-  const aHumidite = type === "humidite";
-  const aGaz = type === "gaz";
-  const aPresence = type === "presence";
-  const aFlamme = type === "flamme";
-
-  return (
-    <>
-      {succes ? (
-        <div className="flex flex-col items-center justify-center py-16 animate-fondu">
-          <div className="w-20 h-20 rounded-full bg-[#00C853]/15 flex items-center justify-center mb-4">
-            <svg className="w-10 h-10 text-[#00C853]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-            </svg>
-          </div>
-          <p className="text-white font-bold text-lg">Seuils enregistrés</p>
-          <p className="text-[#94A3B8] text-sm mt-1">Redirection...</p>
-        </div>
-      ) : (
-        <>
-          {aTemperature && (
-            <section>
-              <h2 className="text-white font-bold text-base mb-3">Température</h2>
-              <Carte>
-                <div className="space-y-4">
-                  <div>
-                    <label className="text-[#94A3B8] text-xs font-medium mb-1 block">Seuil minimum (°C)</label>
-                    <input type="number" value={temperatureMin} onChange={(e) => setTemperatureMin(e.target.value)} className="w-full bg-[#243447] text-white rounded-lg px-3 py-2 border border-[#334155] focus:outline-none focus:border-[#FF9900]" />
-                  </div>
-                  <div>
-                    <label className="text-[#94A3B8] text-xs font-medium mb-1 block">Seuil maximum (°C)</label>
-                    <input type="number" value={temperatureMax} onChange={(e) => setTemperatureMax(e.target.value)} className="w-full bg-[#243447] text-white rounded-lg px-3 py-2 border border-[#334155] focus:outline-none focus:border-[#FF9900]" />
-                  </div>
-                </div>
-              </Carte>
-            </section>
-          )}
-          {aHumidite && (
-            <section>
-              <h2 className="text-white font-bold text-base mb-3">Humidité</h2>
-              <Carte>
-                <div className="space-y-4">
-                  <div>
-                    <label className="text-[#94A3B8] text-xs font-medium mb-1 block">Seuil minimum (%)</label>
-                    <input type="number" value={humiditeMin} onChange={(e) => setHumiditeMin(e.target.value)} className="w-full bg-[#243447] text-white rounded-lg px-3 py-2 border border-[#334155] focus:outline-none focus:border-[#FF9900]" />
-                  </div>
-                  <div>
-                    <label className="text-[#94A3B8] text-xs font-medium mb-1 block">Seuil maximum (%)</label>
-                    <input type="number" value={humiditeMax} onChange={(e) => setHumiditeMax(e.target.value)} className="w-full bg-[#243447] text-white rounded-lg px-3 py-2 border border-[#334155] focus:outline-none focus:border-[#FF9900]" />
-                  </div>
-                </div>
-              </Carte>
-            </section>
-          )}
-          {aGaz && (
-            <section>
-              <h2 className="text-white font-bold text-base mb-3">Gaz (%)</h2>
-              <Carte>
-                <label className="text-[#94A3B8] text-xs font-medium mb-1 block">Seuil maximum (%)</label>
-                <input type="number" value={gazMax} onChange={(e) => setGazMax(e.target.value)} className="w-full bg-[#243447] text-white rounded-lg px-3 py-2 border border-[#334155] focus:outline-none focus:border-[#FF9900]" />
-              </Carte>
-            </section>
-          )}
-          {aPresence && (
-            <section>
-              <h2 className="text-white font-bold text-base mb-3">Présence</h2>
-              <Carte>
-                <label className="flex items-center gap-3 cursor-pointer">
-                  <input type="checkbox" checked={presenceActive} onChange={(e) => setPresenceActive(e.target.checked)} className="w-4 h-4 accent-[#FF9900]" />
-                  <span className="text-white text-sm">Détection de présence active</span>
-                </label>
-              </Carte>
-            </section>
-          )}
-          {aFlamme && (
-            <section>
-              <h2 className="text-white font-bold text-base mb-3">Flamme</h2>
-              <Carte>
-                <label className="flex items-center gap-3 cursor-pointer">
-                  <input type="checkbox" checked={flammeActive} onChange={(e) => setFlammeActive(e.target.checked)} className="w-4 h-4 accent-[#FF9900]" />
-                  <span className="text-white text-sm">Détection de flamme active</span>
-                </label>
-              </Carte>
-            </section>
-          )}
-          <div className="space-y-3 pt-2">
-            <Bouton onClick={sauvegarder}>Enregistrer les seuils</Bouton>
-            <button onClick={() => router.push("/")} className="w-full text-center text-[#94A3B8] text-sm font-medium py-2">Annuler</button>
-          </div>
-        </>
-      )}
-    </>
+  const champ = (label: string, valeur: string, setter: (v: string) => void) => (
+    <div>
+      <label className="text-[#94A3B8] text-xs font-medium mb-1 block">
+        {label}
+      </label>
+      <input
+        type="number"
+        value={valeur}
+        onChange={(e) => setter(e.target.value)}
+        className="w-full bg-[#243447] text-white rounded-lg px-3 py-2 border border-[#334155] focus:outline-none focus:border-[#FF9900]"
+      />
+    </div>
   );
-}
 
-export default function SeuilsCapteurPage() {
   return (
     <div className="min-h-screen bg-[#1A2332] pb-24">
       <Header titre="Seuils d'alerte" sousTitre="Configuration des seuils" />
       <main className="px-5 py-5 space-y-5">
-        <Suspense fallback={<p className="text-[#94A3B8] text-center">Chargement...</p>}>
-          <SeuilsForm />
-        </Suspense>
+        {chargement ? (
+          <p className="text-[#94A3B8] text-center">Chargement...</p>
+        ) : succes ? (
+          <div className="flex flex-col items-center justify-center py-16 animate-fondu">
+            <div className="w-20 h-20 rounded-full bg-[#00C853]/15 flex items-center justify-center mb-4">
+              <svg className="w-10 h-10 text-[#00C853]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
+            <p className="text-white font-bold text-lg">Seuils enregistrés</p>
+            <p className="text-[#94A3B8] text-sm mt-1">Redirection...</p>
+          </div>
+        ) : (
+          <>
+            <section>
+              <h2 className="text-white font-bold text-base mb-3">Température</h2>
+              <Carte>
+                <div className="space-y-4">
+                  {champ("Seuil minimum (°C)", temperatureMin, setTemperatureMin)}
+                  {champ("Seuil maximum (°C)", temperatureMax, setTemperatureMax)}
+                </div>
+              </Carte>
+            </section>
+            <section>
+              <h2 className="text-white font-bold text-base mb-3">Humidité</h2>
+              <Carte>
+                <div className="space-y-4">
+                  {champ("Seuil minimum (%)", humiditeMin, setHumiditeMin)}
+                  {champ("Seuil maximum (%)", humiditeMax, setHumiditeMax)}
+                </div>
+              </Carte>
+            </section>
+            <section>
+              <h2 className="text-white font-bold text-base mb-3">Gaz</h2>
+              <Carte>
+                {champ("Seuil maximum (%)", gazMax, setGazMax)}
+              </Carte>
+            </section>
+
+            <div className="bg-[#2979FF]/8 border border-[#2979FF]/15 rounded-xl p-3">
+              <p className="text-[#2979FF] text-xs text-center leading-relaxed">
+                Ces seuils s&apos;appliquent à tous les capteurs (configuration
+                globale, stockée en base de données).
+              </p>
+            </div>
+
+            {erreur && (
+              <p className="text-[#FF1744] text-sm text-center bg-[#FF1744]/10 py-2 rounded-lg">
+                {erreur}
+              </p>
+            )}
+
+            <div className="space-y-3 pt-2">
+              <Bouton onClick={sauvegarder}>Enregistrer les seuils</Bouton>
+              <button
+                onClick={() => router.push("/")}
+                className="w-full text-center text-[#94A3B8] text-sm font-medium py-2"
+              >
+                Annuler
+              </button>
+            </div>
+          </>
+        )}
       </main>
     </div>
   );
