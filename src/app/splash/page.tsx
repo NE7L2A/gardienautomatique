@@ -8,22 +8,8 @@ export default function SplashPage() {
   const router = useRouter();
 
   useEffect(() => {
-    const etat = localStorage.getItem("protecteur_etat_app");
     const timer = setTimeout(() => {
-      if (etat) {
-        const parsed = JSON.parse(etat);
-        if (parsed.setupComplete && parsed.utilisateurConnecte) {
-          router.replace("/");
-        } else if (parsed.inscriptionComplete) {
-          router.replace("/setup");
-        } else if (parsed.premierLancement) {
-          router.replace("/inscription");
-        } else {
-          router.replace("/connexion");
-        }
-      } else {
-        router.replace("/inscription");
-      }
+      router.replace("/");
     }, 2500);
 
     return () => clearTimeout(timer);

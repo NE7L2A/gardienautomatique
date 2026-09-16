@@ -1,31 +1,29 @@
 "use client";
 
-import { useState, useEffect, useSyncExternalStore } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import Header from "@/components/ui/Header";
 import Navigation from "@/components/ui/Navigation";
 import Semaphore from "@/components/dashboard/Semaphore";
 import CarteCapteur from "@/components/dashboard/CarteCapteur";
-import { alertesRecentes } from "@/lib/mock-data";
-import { supprimerDispositif, getSeuilsCapteur } from "@/lib/store";
-import {
-  construireDispositifs,
-  grouperDispositifs,
-  capteursDisponibles,
-  getDeviceIdBd,
-  type Dispositif,
-} from "@/lib/dispositifs";
+import { libelleTypeCapteur } from "@/lib/mock-data";
+import { chargerDispositifsApi, type Dispositif } from "@/lib/dispositifs";
 import {
   obtenirCapteurs,
   obtenirMesures,
+  obtenirConfigAlertes,
+  envoyerEmail,
   estPresenceActive,
+  supprimerDispositifApi,
 } from "@/lib/api";
+import { useRapportQuotidien } from "@/lib/use-rapport-quotidien";
 import type {
   EtatCapteur,
   Lecture,
   PointTemperature,
   PointHumidite,
   PointGaz,
+  ConfigAlertes,
 } from "@/types";
 import {
   LineChart,
@@ -127,28 +125,29 @@ function construireHistorique(
     }));
   if (gaz.length > 0) result.gaz = gaz;
 
-  result.presence = construireBlocsPresence(lectures6);
+  if (lectures6.some((l) => l.presence)) {
+    result.presence = construireBlocsPresence(lectures6);
+  }
   return result;
 }
 
 function appliquerLectures(
   dispositifs: Dispositif[],
-  lectures: Lecture[]
+  lectures: Lecture[],
+  config: ConfigAlertes
 ): Dispositif[] {
   const parDevice = new Map<string, Lecture>();
   for (const lecture of lectures) parDevice.set(lecture.device_id, lecture);
 
-  return dispositifs.map((dispositif) => {
-    const idBD = getDeviceIdBd(dispositif.baseId);
-    const lecture = idBD ? parDevice.get(idBD) : undefined;
-    if (!lecture) return dispositif;
+  const tempMax = config.temp_max ?? 28;
+  const tempMin = config.temp_min ?? 18;
+  const humMax = config.hum_max ?? 80;
+  const humMin = config.hum_min ?? 20;
+  const gazMax = config.gaz_max ?? 60;
 
-    const seuils = getSeuilsCapteur(dispositif.baseId);
-    const tempMax = seuils?.temperatureMax ?? 28;
-    const tempMin = seuils?.temperatureMin ?? 18;
-    const humMax = seuils?.humiditeMax ?? 80;
-    const humMin = seuils?.humiditeMin ?? 20;
-    const gazMax = seuils?.gazMax ?? 60;
+  return dispositifs.map((dispositif) => {
+    const lecture = parDevice.get(dispositif.dev_eui);
+    if (!lecture) return dispositif;
 
     return {
       ...dispositif,
@@ -190,37 +189,46 @@ function appliquerLectures(
   });
 }
 
-type Ecouteur = () => void;
+const verrousAlerte = new Set<string>();
 
-let snapshot: Dispositif[] | null = null;
-let snapshotServeur: Dispositif[] | null = null;
-const ecouteurs = new Set<Ecouteur>();
-
-function lireSnapshot(): Dispositif[] {
-  if (snapshot === null) snapshot = construireDispositifs();
-  return snapshot;
+function cleVerrou(devEui: string, type: string): string {
+  return `${devEui}:${type}`;
 }
 
-function lireSnapshotServeur(): Dispositif[] {
-  if (snapshotServeur === null)
-    snapshotServeur = grouperDispositifs(capteursDisponibles(), []);
-  return snapshotServeur;
-}
-
-function publier(nouveau: Dispositif[]): void {
-  snapshot = nouveau;
-  ecouteurs.forEach((fn) => fn());
-}
-
-function actualiserDepuisStockage(): void {
-  publier(construireDispositifs());
-}
-
-function souscrire(onChange: Ecouteur): () => void {
-  ecouteurs.add(onChange);
-  return () => {
-    ecouteurs.delete(onChange);
-  };
+function traiterFranchissements(
+  dispositifs: Dispositif[],
+  config: ConfigAlertes
+): void {
+  const tempMax = config.temp_max ?? 28;
+  const humMax = config.hum_max ?? 80;
+  const gazMax = config.gaz_max ?? 60;
+  for (const d of dispositifs) {
+    for (const c of d.capteurs) {
+      const cle = cleVerrou(d.dev_eui, c.type);
+      if (c.etat === "danger") {
+        if (verrousAlerte.has(cle)) continue;
+        verrousAlerte.add(cle);
+        let message = "";
+        if (c.type === "temperature") {
+          message = `Température de ${d.nom} a atteint ${c.valeur}${c.unite} (seuil : ${tempMax}${c.unite})`;
+        } else if (c.type === "humidite") {
+          message = `Taux d'humidité de ${d.nom} a atteint ${c.valeur}${c.unite} (seuil : ${humMax}${c.unite})`;
+        } else if (c.type === "gaz") {
+          message = `Taux de gaz de ${d.nom} a atteint ${c.valeur}${c.unite} (seuil : ${gazMax}${c.unite})`;
+        } else if (c.type === "presence") {
+          message = `Mouvement détecté dans ${d.nom}`;
+        } else {
+          message = `${c.nom} : ${c.valeur}${c.unite}`;
+        }
+        envoyerEmail({
+          titre: `ALERTE ${d.nom} — ${libelleTypeCapteur[c.type] ?? c.type}`,
+          message,
+        });
+      } else if (c.etat === "normal") {
+        verrousAlerte.delete(cle);
+      }
+    }
+  }
 }
 
 interface GraphiqueProps {
@@ -268,7 +276,10 @@ function BlocsPresence({
   donnees: { heure: string; actif: boolean }[];
   nomDispositif: string;
 }) {
+  const [selection, setSelection] = useState<number | null>(null);
   const actifs = donnees.filter((p) => p.actif).length;
+  const bloque = selection !== null ? donnees[selection] : null;
+
   return (
     <div className="bg-[#243447] rounded-xl p-4 border border-[#334155]">
       <h3 className="text-white font-bold text-sm mb-1">Présence — 6h</h3>
@@ -277,16 +288,33 @@ function BlocsPresence({
       </p>
       <div className="flex flex-wrap gap-1">
         {donnees.map((p, i) => (
-          <div
+          <button
             key={i}
-            className={`w-3.5 h-3.5 rounded-sm ${
+            onClick={() => setSelection(selection === i ? null : i)}
+            aria-label={`${p.heure} — ${p.actif ? "Présence détectée" : "Aucun mouvement"}`}
+            className={`w-3.5 h-3.5 rounded-sm transition-all duration-100 ${
               p.actif ? "bg-[#FF9900] shadow-[0_0_6px_rgba(255,153,0,0.5)]" : "bg-[#334155]"
-            }`}
-            title={`${p.heure} — ${p.actif ? "Présence détectée" : "Aucun mouvement"}`}
+            } ${selection === i ? "ring-2 ring-white scale-110" : ""}`}
           />
         ))}
       </div>
-      <div className="flex items-center gap-4 mt-3">
+
+      <div className="mt-3 min-h-[2.5rem]">
+        {bloque ? (
+          <div className="bg-[#1A2332] border border-[#334155] rounded-lg px-3 py-2 flex items-center justify-between">
+            <span className="text-white text-sm font-semibold">{bloque.heure}</span>
+            <span className={`text-xs font-medium ${bloque.actif ? "text-[#FF9900]" : "text-[#94A3B8]"}`}>
+              {bloque.actif ? "Présence détectée" : "Aucun mouvement"}
+            </span>
+          </div>
+        ) : (
+          <p className="text-[#64748B] text-xs">
+            Cliquez sur un bloc pour afficher l&apos;heure correspondante.
+          </p>
+        )}
+      </div>
+
+      <div className="flex items-center gap-4 mt-1">
         <div className="flex items-center gap-1.5">
           <div className="w-3 h-3 rounded-sm bg-[#FF9900]" />
           <span className="text-[10px] text-[#94A3B8]">Détecté</span>
@@ -301,62 +329,109 @@ function BlocsPresence({
   );
 }
 
-export default function DashboardPage() {
-  const dispositifs = useSyncExternalStore(
-    souscrire,
-    lireSnapshot,
-    lireSnapshotServeur
+function formaterDateReception(timestamp: string): string {
+  return new Date(timestamp).toLocaleDateString("fr-FR", {
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+}
+
+function MessageAucuneDonnee({
+  texte,
+  titre,
+  sousTitre,
+}: {
+  texte: string;
+  titre?: string;
+  sousTitre?: string;
+}) {
+  return (
+    <div className="bg-[#243447] rounded-xl p-4 border border-[#334155]">
+      {titre && (
+        <h3 className="text-white font-bold text-sm mb-1">{titre}</h3>
+      )}
+      {sousTitre && (
+        <p className="text-[#64748B] text-xs mb-3">{sousTitre}</p>
+      )}
+      <div className="flex items-center justify-center min-h-[5rem]">
+        <p className="text-[#64748B] text-sm text-center">{texte}</p>
+      </div>
+    </div>
   );
+}
+
+export default function DashboardPage() {
+  const [dispositifs, setDispositifs] = useState<Dispositif[]>([]);
   const [selection, setSelection] = useState<string>("tous");
   const [horsLigne, setHorsLigne] = useState(false);
+  const [derniereReception, setDerniereReception] = useState<string | null>(null);
   const [historiques, setHistoriques] = useState<
     Record<string, HistoriqueDispositif>
   >({});
 
-  const cleDispositifs = dispositifs
-    .map((d) => `${d.baseId}:${getDeviceIdBd(d.baseId) ?? ""}`)
-    .join("|");
+  useRapportQuotidien();
+
+  async function chargerDispositifs() {
+    const liste = await chargerDispositifsApi();
+    setDispositifs(liste);
+  }
+
+  const cleDispositifs = dispositifs.map((d) => d.dev_eui).join("|");
 
   async function rafraichirValeurs() {
-    const lectures = await obtenirCapteurs();
+    const [lectures, config] = await Promise.all([
+      obtenirCapteurs(),
+      obtenirConfigAlertes(),
+    ]);
     if (!lectures) {
       setHorsLigne(true);
       return;
     }
     setHorsLigne(false);
-    publier(appliquerLectures(lireSnapshot(), lectures));
+    const configVal = config ?? {};
+    setDispositifs((prev) => {
+      const misAJour = appliquerLectures(prev, lectures, configVal);
+      traiterFranchissements(misAJour, configVal);
+      return misAJour;
+    });
+    let derniere = "";
+    for (const lecture of lectures) {
+      if (!derniere || lecture.timestamp > derniere) derniere = lecture.timestamp;
+    }
+    if (derniere) setDerniereReception(derniere);
   }
 
   async function rafraichirHistorique() {
-    const courants = lireSnapshot();
+    const courants = dispositifs;
     const maintenant = new Date().toISOString();
     const debut24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
     const debut6h = new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString();
     const result: Record<string, HistoriqueDispositif> = {};
     for (const d of courants) {
-      const idBD = getDeviceIdBd(d.baseId);
-      if (!idBD) continue;
       const [r24, r6] = await Promise.all([
         obtenirMesures({
-          device_id: idBD,
+          device_id: d.dev_eui,
           from: debut24h,
           to: maintenant,
           limit: 2000,
         }),
         obtenirMesures({
-          device_id: idBD,
+          device_id: d.dev_eui,
           from: debut6h,
           to: maintenant,
           limit: 2000,
         }),
       ]);
-      if (r24) result[d.baseId] = construireHistorique(r24, r6 ?? []);
+      if (r24) result[d.dev_eui] = construireHistorique(r24, r6 ?? []);
     }
     setHistoriques(result);
   }
 
   useEffect(() => {
-    actualiserDepuisStockage();
+    chargerDispositifs();
     setTimeout(rafraichirValeurs, 0);
     setTimeout(rafraichirHistorique, 0);
     const intervalValeurs = setInterval(rafraichirValeurs, 5000);
@@ -374,7 +449,7 @@ export default function DashboardPage() {
   const dispositifsVisibles =
     selection === "tous"
       ? dispositifs
-      : dispositifs.filter((d) => d.baseId === selection);
+      : dispositifs.filter((d) => d.dev_eui === selection);
 
   const capteursVisibles = dispositifsVisibles.flatMap((d) => d.capteurs);
 
@@ -386,16 +461,16 @@ export default function DashboardPage() {
     ? "alerte"
     : "normal";
 
-  const gererSuppression = (dispositif: Dispositif) => {
+  const gererSuppression = async (dispositif: Dispositif) => {
     if (
       !window.confirm(
         `Supprimer le dispositif « ${dispositif.nom} » ? Toutes ses données seront retirées de la page.`
       )
     )
       return;
-    supprimerDispositif(dispositif.baseId);
-    actualiserDepuisStockage();
-    if (selection === dispositif.baseId) setSelection("tous");
+    await supprimerDispositifApi(dispositif.dev_eui);
+    await chargerDispositifs();
+    if (selection === dispositif.dev_eui) setSelection("tous");
   };
 
   return (
@@ -414,7 +489,7 @@ export default function DashboardPage() {
               Tous
             </option>
             {dispositifs.map((d) => (
-              <option key={d.baseId} value={d.baseId} className="bg-[#243447]">
+              <option key={d.dev_eui} value={d.dev_eui} className="bg-[#243447]">
                 {d.nom}
               </option>
             ))}
@@ -424,8 +499,17 @@ export default function DashboardPage() {
         {horsLigne && (
           <div className="bg-[#FF1744]/10 border border-[#FF1744]/25 rounded-xl p-3">
             <p className="text-[#FF1744] text-xs font-semibold">
-              Backend hors ligne — dernières données affichées
+              Vous êtes hors ligne
             </p>
+          </div>
+        )}
+
+        {derniereReception && (
+          <div className="bg-[#2979FF]/8 border border-[#2979FF]/15 rounded-xl p-3 flex items-center justify-between gap-3">
+            <span className="text-[#94A3B8] text-xs">Dernière réception</span>
+            <span className="text-white text-xs font-semibold">
+              {formaterDateReception(derniereReception)}
+            </span>
           </div>
         )}
 
@@ -442,40 +526,22 @@ export default function DashboardPage() {
           />
         </div>
 
-        {alertesRecentes.filter((a) => !a.lue).length > 0 && (
-          <div className="bg-[#FF9900]/8 border border-[#FF9900]/20 rounded-xl p-3">
-            <p className="text-[#FF9900] text-xs font-semibold mb-1 uppercase tracking-wider">
-              Alertes récentes
-            </p>
-            {alertesRecentes
-              .filter((a) => !a.lue)
-              .slice(0, 2)
-              .map((alerte) => (
-                <p key={alerte.id} className="text-white text-sm">
-                  {alerte.message}
-                </p>
-              ))}
-          </div>
-        )}
-
         {dispositifsVisibles.map((dispositif) => {
-          const hist = historiques[dispositif.baseId];
-          const idBD = getDeviceIdBd(dispositif.baseId);
+          const hist = historiques[dispositif.dev_eui];
           return (
-            <section key={dispositif.baseId} className="space-y-5">
+            <section key={dispositif.dev_eui} className="space-y-5">
               <div className="flex items-center justify-between gap-3">
                 <div className="min-w-0">
                   <h2 className="text-white font-bold text-lg">
                     {dispositif.nom}
                   </h2>
                   <p className="text-[#64748B] text-xs">
-                    {dispositif.capteurs.length} mesure(s) en temps réel
-                    {idBD ? ` · ${idBD}` : ""}
+                    {dispositif.capteurs.length} capteurs · {dispositif.dev_eui}
                   </p>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   <Link
-                    href={`/modifier-dispositif?id=${dispositif.baseId}`}
+                    href={`/modifier-dispositif?dev_eui=${dispositif.dev_eui}`}
                     aria-label={`Modifier ${dispositif.nom}`}
                     className="w-9 h-9 rounded-xl flex items-center justify-center bg-[#2979FF]/10 border border-[#2979FF]/20 text-[#2979FF] transition-all duration-200 hover:scale-105 active:scale-95"
                   >
@@ -501,16 +567,7 @@ export default function DashboardPage() {
                 ))}
               </div>
 
-              {!idBD && (
-                <div className="bg-[#243447] rounded-xl p-4 border border-[#334155]">
-                  <p className="text-[#94A3B8] text-xs">
-                    En attente de données — renseignez l&apos;ID de la base de
-                    données via « Modifier ».
-                  </p>
-                </div>
-              )}
-
-              {hist?.temperature && (
+              {hist?.temperature ? (
                 <Graphique
                   titre="Température — 24h"
                   sousTitre={`Évolution ${dispositif.nom}`}
@@ -519,9 +576,15 @@ export default function DashboardPage() {
                   couleur="#FF9900"
                   domaine={["dataMin - 2", "dataMax + 2"]}
                 />
+              ) : (
+                <MessageAucuneDonnee
+                  titre="Température — 24h"
+                  sousTitre={`Évolution ${dispositif.nom}`}
+                  texte="Aucune donnée reçue sur les dernières 24 heures"
+                />
               )}
 
-              {hist?.humidite && (
+              {hist?.humidite ? (
                 <Graphique
                   titre="Humidité — 24h"
                   sousTitre={`Taux d'humidité ${dispositif.nom}`}
@@ -531,9 +594,15 @@ export default function DashboardPage() {
                   domaine={[0, 100]}
                   formatter={formatterPourcent}
                 />
+              ) : (
+                <MessageAucuneDonnee
+                  titre="Humidité — 24h"
+                  sousTitre={`Taux d'humidité ${dispositif.nom}`}
+                  texte="Aucune donnée reçue sur les dernières 24 heures"
+                />
               )}
 
-              {hist?.gaz && (
+              {hist?.gaz ? (
                 <Graphique
                   titre="Gaz — 24h"
                   sousTitre={`Concentration (%) ${dispositif.nom}`}
@@ -543,12 +612,24 @@ export default function DashboardPage() {
                   domaine={[0, "dataMax + 20"]}
                   formatter={formatterPourcent}
                 />
+              ) : (
+                <MessageAucuneDonnee
+                  titre="Gaz — 24h"
+                  sousTitre={`Concentration (%) ${dispositif.nom}`}
+                  texte="Aucune donnée reçue sur les dernières 24 heures"
+                />
               )}
 
-              {hist?.presence && (
+              {hist?.presence ? (
                 <BlocsPresence
                   donnees={hist.presence}
                   nomDispositif={dispositif.nom}
+                />
+              ) : (
+                <MessageAucuneDonnee
+                  titre="Présence — 6h"
+                  sousTitre={dispositif.nom}
+                  texte="Aucune donnée reçue sur les dernières 6 heures"
                 />
               )}
             </section>

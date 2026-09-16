@@ -2,7 +2,6 @@ export type Presence = "OUI" | "NON";
 
 export interface SaisieMesure {
   device_id: string;
-  nom?: string;
   temperature?: number;
   humidite?: number;
   gaz_pourcent?: number;
@@ -30,18 +29,6 @@ export function validerMesure(corps: unknown): ResultatValidation<SaisieMesure> 
   const deviceId = brut.device_id.trim();
   if (deviceId.length > 50) {
     return { ok: false, erreur: "device_id ne doit pas dépasser 50 caractères." };
-  }
-
-  let nom: string | undefined;
-  if (brut.nom !== undefined && brut.nom !== null) {
-    if (typeof brut.nom !== "string") {
-      return { ok: false, erreur: "nom doit être une chaîne de caractères." };
-    }
-    const nomNet = brut.nom.trim();
-    if (nomNet.length > 50) {
-      return { ok: false, erreur: "nom ne doit pas dépasser 50 caractères." };
-    }
-    nom = nomNet;
   }
 
   let temperature: number | undefined;
@@ -97,7 +84,6 @@ export function validerMesure(corps: unknown): ResultatValidation<SaisieMesure> 
     ok: true,
     donnees: {
       device_id: deviceId,
-      nom,
       temperature,
       humidite,
       gaz_pourcent: gazPourcent,
@@ -111,6 +97,8 @@ export interface SaisieConfigAlerte {
   sms?: string;
   temp_min?: number;
   temp_max?: number;
+  hum_min?: number;
+  hum_max?: number;
   gaz_max?: number;
 }
 
@@ -147,6 +135,18 @@ export function validerConfigAlerte(
       return { ok: false, erreur: "temp_max doit être un nombre." };
     }
     sortie.temp_max = brut.temp_max;
+  }
+  if (brut.hum_min !== undefined) {
+    if (!estNombre(brut.hum_min)) {
+      return { ok: false, erreur: "hum_min doit être un nombre." };
+    }
+    sortie.hum_min = brut.hum_min;
+  }
+  if (brut.hum_max !== undefined) {
+    if (!estNombre(brut.hum_max)) {
+      return { ok: false, erreur: "hum_max doit être un nombre." };
+    }
+    sortie.hum_max = brut.hum_max;
   }
   if (brut.gaz_max !== undefined) {
     if (!Number.isInteger(brut.gaz_max)) {
